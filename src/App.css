@@ -1,184 +1,315 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  padding: 48px 20px;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
-}
-
-#center {
+/* ログイン画面 */
+.login-screen {
   display: flex;
   flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
   flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+  padding: 48px 20px;
+  text-align: center;
 }
 
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
+.login-button {
+  font-size: 16px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+.error-text {
+  color: #d33;
+}
+
+/* マップ一覧画面 */
+.map-list-page {
+  padding: 24px 20px 48px;
   text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
+.new-map-form {
   display: flex;
   gap: 8px;
-  margin: 32px 0 0;
+  margin: 16px 0 24px;
+}
 
-  .logo {
-    height: 18px;
+.new-map-form input {
+  flex: 1 1 auto;
+  font-size: 16px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.new-map-form button,
+.map-list-item button {
+  font-size: 15px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.new-map-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.map-open-button {
+  flex: 1 1 auto;
+  text-align: left;
+  font-size: 17px;
+  font-weight: 500;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.map-updated-at {
+  font-size: 13px;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .map-list-item {
+    flex-direction: column;
+    align-items: stretch;
   }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
+  .map-updated-at {
+    order: 3;
   }
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+/* マップ編集画面 */
+.map-editor-loading {
+  padding: 24px 20px;
 }
 
-.ticks {
-  position: relative;
+.map-editor-page {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
   width: 100%;
+}
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
+.toolbar button {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar-map-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.toolbar-saving {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+/* アウトライン */
+.outline-root,
+.outline-children {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.outline-children {
+  padding-left: 22px;
+}
+
+.outline-root {
+  padding: 12px 16px 48px;
+  text-align: left;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.outline-node {
+  margin: 1px 0;
+}
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collapse-toggle {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.outline-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-h);
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent-border);
+    background: var(--accent-bg);
   }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
+}
+
+.attachment-indicator {
+  flex: 0 0 auto;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.attachment-viewer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 4px 26px;
+}
+
+.attachment-thumbnail {
+  position: relative;
+  width: 96px;
+  height: 96px;
+}
+
+.attachment-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.attachment-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.attachment-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .outline-children {
+    padding-left: 16px;
+  }
+  .outline-input {
+    font-size: 16px; /* iOSでの自動ズームを防ぐため16px以上を維持 */
+  }
+  .collapse-toggle,
+  .attachment-indicator {
+    min-height: 32px;
   }
 }

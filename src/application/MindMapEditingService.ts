@@ -4,6 +4,7 @@ import type { MindMapRepository } from '../domain/mindmap/MindMapRepository'
 import type {
   AttachmentId,
   MapId,
+  MapName,
   MindMapSnapshot,
   NodeId,
   NodeText,
@@ -33,6 +34,7 @@ export class MindMapEditingService {
   private redoStack: MindMapSnapshot[] = []
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private isDirty = false
+  private saving = false
   private renderSnapshot: MindMapEditorSnapshot = { version: 0, map: null }
   private readonly listeners = new Set<Listener>()
 
@@ -107,6 +109,10 @@ export class MindMapEditingService {
     this.mutate((map) => map.removeAttachment(nodeId, attachmentId))
   }
 
+  rename(name: MapName): void {
+    this.mutate((map) => map.rename(name))
+  }
+
   undo(): void {
     const map = this.requireCurrent()
     const snapshot = this.undoStack.pop()
@@ -143,8 +149,30 @@ export class MindMapEditingService {
     if (!this.isDirty || !this.current) {
       return
     }
-    await this.repository.save(this.current)
-    this.isDirty = false
+    this.saving = true
+    this.notify()
+    try {
+      await this.repository.save(this.current)
+      this.isDirty = false
+    } finally {
+      this.saving = false
+      this.notify()
+    }
+  }
+
+  /** UndoスタックからUndoできるか(presentation層のボタン活性制御用)。 */
+  canUndo(): boolean {
+    return this.undoStack.length > 0
+  }
+
+  /** RedoスタックからRedoできるか(presentation層のボタン活性制御用)。 */
+  canRedo(): boolean {
+    return this.redoStack.length > 0
+  }
+
+  /** 保存インジケータ表示用。 */
+  isSaving(): boolean {
+    return this.saving
   }
 
   private mutate<T>(operation: (map: MindMap) => T): T {

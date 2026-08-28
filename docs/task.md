@@ -35,22 +35,30 @@
 - [x] `MindMapRepository`に`create(name)`を追加(`domain-model.md`更新。MapId=DriveのfileIdのためID採番はリポジトリ実装側の責務)
 - [x] アプリケーション層の単体テスト(`MindMapCatalogService.test.ts`, `MindMapEditingService.test.ts`。フェイクリポジトリ+vitestのフェイクタイマーでデバウンス・Undo/Redo上限を検証)
 
-## 3. インフラ層(`src/infrastructure/drive/`)
+## 3. インフラ層(`src/infrastructure/drive/`)(コード実装完了、手動設定は未実施)
 
-- [ ] `googleAuth.ts`: GIS トークンクライアントの初期化、ログイン/ログアウト、`drive.file`スコープ、無言再認可
-- [ ] `DriveMindMapRepository.ts`: アプリ専用フォルダの検索/作成、JSONのシリアライズ/デシリアライズ、findAllSummaries/findById/save/delete
-- [ ] `DriveAttachmentStorage.ts`: 画像アップロード/取得URL/削除
-- [ ] Google Cloud Console側の設定(OAuthクライアントID発行、承認済みJavaScript生成元の登録)— 手動作業、要ユーザー実施
+- [x] `googleAuth.ts`: GIS トークンクライアントの初期化、ログイン/ログアウト、`drive.file`スコープ、無言再認可(`GoogleAuthRequiredError`で呼び出し側に再ログインが必要なことを伝える)
+- [x] `DriveMindMapRepository.ts`: アプリ専用フォルダの検索/作成、JSONのシリアライズ/デシリアライズ、findAllSummaries/findById/save/delete
+  - `findAllSummaries`が本文(全ノード)をダウンロードせずに済むよう、マップ名・更新日時をDriveファイルの`properties`にも複製して保存する方式を採用(save/create時に同期)
+- [x] `DriveAttachmentStorage.ts`: 画像アップロード/取得URL(`drive.file`スコープでは公開リンクを発行できないため、認可付きリクエストで取得したBlobをObject URL化)/削除
+- [x] 補助モジュール `driveApi.ts`(認可付きfetch、アプリ専用フォルダ解決、multipart作成/更新の共通処理)、`mindMapJson.ts`(MindMap⇔JSON変換、純粋関数でユニットテスト済み)を追加(architecture.md 6節のファイル一覧からの実装時拡張)
+- [x] `MindMapRepository`実装のみで完結するテストとして`mindMapJson.test.ts`(往復変換)を追加。Drive API・GISへの実通信は自動テスト対象外(ライブのGoogleアカウント・OAuth同意が必要なため)
+- [x] Vite環境変数の型定義(`src/vite-env.d.ts`)と`.env.example`(`VITE_GOOGLE_CLIENT_ID`)を追加
+- [x] **Google Cloud Console側の設定(手動作業、完了)**: 専用プロジェクト`mindmap-drive`(プロジェクトID: `mindmap-drive-506913`)を新規作成、Google Drive API有効化、OAuth同意画面(外部・テストモード、テストユーザーに`rouninnomi@gmail.com`を登録)、OAuthクライアントID発行(ウェブアプリケーション、承認済みJavaScript生成元に`http://localhost:5173`を登録)。`.env`に`VITE_GOOGLE_CLIENT_ID`を設定済み(`.env`はgit管理外)。本番デプロイ先が決まったら、そのオリジンをクライアントIDの承認済みJavaScript生成元に追加すること
+- [x] 実際のGoogleアカウントでブラウザ動作確認(ログイン→マップ作成→保存→一覧表示→再読み込みでの復元)。プレゼンテーション層(4節)実装後にまとめて実施し、以下の2点の不具合を発見・修正した
+  - インデント/アウトデント直後にテキストが失われる不具合(未コミットのローカル入力バッファが、ノード移動に伴うReactのアンマウントで消えていた)
+  - キーボードでのUndo/Redo直後にフォーカスが失われ、以降のショートカットが効かなくなる不具合(構造変更を伴うのに、フォーカス復元処理が呼ばれていなかった)
 
-## 4. プレゼンテーション層(`src/presentation/`)
+## 4. プレゼンテーション層(`src/presentation/`)(完了)
 
-- [ ] `hooks/useMindMapCatalog.ts` / `hooks/useMindMapEditor.ts`(useSyncExternalStore接続)
-- [ ] `components/LoginButton.tsx`
-- [ ] `pages/MapListPage.tsx`: 一覧・新規作成・名前変更・削除
-- [ ] `pages/MapEditorPage.tsx` / `components/OutlineNode.tsx`: アウトライン編集UI、キーボードショートカット(要件定義4.3節の表に準拠)
-- [ ] `components/AttachmentViewer.tsx`: 画像添付の表示・追加
-- [ ] `components/Toolbar.tsx`: Undo/Redoボタン等
-- [ ] レスポンシブ対応(PC/スマホ)・タッチ操作の調整
+- [x] `hooks/useMindMapCatalog.ts` / `hooks/useMindMapEditor.ts`(useSyncExternalStore接続)
+- [x] `components/LoginButton.tsx`
+- [x] `pages/MapListPage.tsx`: 一覧・新規作成・名前変更・削除
+- [x] `pages/MapEditorPage.tsx` / `components/OutlineNode.tsx`: アウトライン編集UI、キーボードショートカット(要件定義4.3節の表がテキスト入力中の文字と衝突する箇所は実装時に調整。詳細は`MapEditorPage.tsx`冒頭のコメントと`requirements.md` 4.3節の注記を参照)
+- [x] `components/AttachmentViewer.tsx`: 画像添付の表示・追加(サムネイル+クリックで新規タブ表示)
+- [x] `components/Toolbar.tsx`: Undo/Redoボタン・保存インジケータ・戻る/名前変更
+- [x] レスポンシブ対応の基本CSS(@media、iOSズーム防止のための16px入力フォント、タッチターゲットサイズ調整)を実装。実機/真の狭幅ビューポートでの目視確認は未実施(自動化環境のブラウザウィンドウが約630px未満に縮小できなかったため)
+- [ ] 画像添付(Ctrl+I)の実機確認: ネイティブファイル選択ダイアログはブラウザ自動化から操作できないため未検証。ユーザー側での確認が必要
 
 ## 5. 仕上げ
 

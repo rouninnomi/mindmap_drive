@@ -197,4 +197,44 @@ describe('MindMapEditingService', () => {
 
     expect(repository.saveCalls).toHaveLength(0)
   })
+
+  it('canUndo/canRedoはスタックの状態を反映する', async () => {
+    const { service, map } = await loadedService()
+
+    expect(service.canUndo()).toBe(false)
+    expect(service.canRedo()).toBe(false)
+
+    const a = service.addChildNode(map.rootNode.id, NodeText.of('A'))
+    expect(service.canUndo()).toBe(true)
+    expect(service.canRedo()).toBe(false)
+
+    service.undo()
+    expect(service.canUndo()).toBe(false)
+    expect(service.canRedo()).toBe(true)
+
+    service.redo()
+    expect(service.canUndo()).toBe(true)
+    expect(service.canRedo()).toBe(false)
+    expect(map.rootNode.findById(a)).toBeDefined()
+  })
+
+  it('flushPendingSave中はisSavingがtrueになる', async () => {
+    const { service, repository, map } = await loadedService()
+    let resolveSave: () => void = () => {}
+    repository.save = () =>
+      new Promise((resolve) => {
+        resolveSave = resolve
+      })
+
+    service.addChildNode(map.rootNode.id, NodeText.of('A'))
+    expect(service.isSaving()).toBe(false)
+
+    const flushPromise = service.flushPendingSave()
+    expect(service.isSaving()).toBe(true)
+
+    resolveSave()
+    await flushPromise
+
+    expect(service.isSaving()).toBe(false)
+  })
 })

@@ -153,6 +153,8 @@ src/
       DriveMindMapRepository.ts
       DriveAttachmentStorage.ts
       googleAuth.ts
+      driveApi.ts        # 実装時に追加: 認可付きfetch・アプリ専用フォルダ解決・multipart共通処理
+      mindMapJson.ts      # 実装時に追加: MindMap⇔JSON(4.3節スキーマ)の変換
   presentation/
     pages/
       MapListPage.tsx
