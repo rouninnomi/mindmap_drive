@@ -11,17 +11,17 @@
 - [x] `npm install`、開発サーバー起動確認(`http://localhost:5173/`)
 - [x] DDDレイヤーのフォルダスケルトン作成(`src/domain/mindmap`, `src/application`, `src/infrastructure/drive`, `src/presentation/{pages,components,hooks}`)
 
-## 1. ドメイン層(`src/domain/mindmap/`)
+## 1. ドメイン層(`src/domain/mindmap/`)(完了)
 
-- [ ] 値オブジェクト実装(`valueObjects.ts`): MapId, MapName, NodeId, NodeText, Attachment, AttachmentId, MindMapSnapshot, MapSummary
-- [ ] `Node.ts`: エンティティ実装(text/children/collapsed/attachments)
-- [ ] `MindMap.ts`: 集約ルート実装
+- [x] 値オブジェクト実装(`valueObjects.ts`): MapId, MapName, NodeId, NodeText, Attachment, AttachmentId, MindMapSnapshot, MapSummary
+- [x] `Node.ts`: エンティティ実装(text/children/collapsed/attachments)
+- [x] `MindMap.ts`: 集約ルート実装
   - 非表示ルートノードの初期化
   - addSiblingNode / addChildNode / indent / outdent / moveUp / moveDown / deleteNode(カスケード) / toggleCollapse / updateText / attachImage / removeAttachment / rename
   - createSnapshot / restoreSnapshot
-  - 不変条件(循環参照禁止、マップ名非空)のチェック
-- [ ] `MindMapRepository.ts` / `AttachmentStorage.ts`: リポジトリインターフェース定義
-- [ ] ドメイン層の単体テスト(木構造操作・不変条件・スナップショット復元)
+  - 不変条件(マップ名非空 等)のチェック。indent/outdent/moveUp/moveDownは既存の親子関係の中でのみノードを動かすため循環参照は構造上発生しない
+- [x] `MindMapRepository.ts` / `AttachmentStorage.ts`: リポジトリインターフェース定義
+- [x] ドメイン層の単体テスト(`MindMap.test.ts`、vitest導入。木構造操作・不変条件・スナップショット復元。`npm test`で実行)
 
 ## 2. アプリケーション層(`src/application/`)
 

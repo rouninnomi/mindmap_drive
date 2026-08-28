@@ -45,8 +45,8 @@ src/
 
 ## 現在のフェーズ状況
 
-- **現在: スキャフォールディング完了**(Vite + React + TypeScript、`src/`配下にDDDレイヤーの空フォルダを作成済み。開発サーバー起動確認済み)
-- 次: `docs/task.md` に沿ってドメイン層(`src/domain/mindmap/`)の実装から着手
+- **現在: ドメイン層(`src/domain/mindmap/`)実装完了**(値オブジェクト、`Node`エンティティ、`MindMap`集約ルート、`MindMapRepository`/`AttachmentStorage`インターフェース、vitestによる単体テスト19件。`npm run build`・`npm test`とも通過確認済み)
+- 次: `docs/task.md` 2節に沿ってアプリケーション層(`src/application/`: `MindMapCatalogService`, `MindMapEditingService`)の実装に着手
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
 このセクションはフェーズが進むたびに更新すること。
