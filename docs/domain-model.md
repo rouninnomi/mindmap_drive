@@ -61,6 +61,7 @@ MindMap集約に属するエンティティ。`NodeId` で識別される。
 
 ```
 interface MindMapRepository {
+  create(name: MapName): Promise<MindMap>     // 新規作成・ID割り当て(下記注記)
   findById(id: MapId): Promise<MindMap>
   findAllSummaries(): Promise<MapSummary[]>   // マップ一覧(軽量)
   save(map: MindMap): Promise<void>
@@ -73,6 +74,8 @@ interface AttachmentStorage {
   delete(attachment: Attachment): Promise<void>
 }
 ```
+
+- `create` はアプリケーション層実装時(`application/MindMapCatalogService.ts`)に追加した。`architecture.md` 4.2節の決定どおり MapId = Google DriveのfileId とするため、IDの採番はDriveへ実際にファイルを作成するリポジトリ実装側でしか行えない。アプリケーション層が事前にMapIdを採番してから `save` することはできないため、生成と初回保存を1つの操作としてリポジトリ側に持たせている
 
 - `MindMapRepository` の実装(`infrastructure/`)がGoogle Drive APIを呼び出し、1マップ=1JSONファイルとしてシリアライズ/デシリアライズする
 - `AttachmentStorage` の実装がマップと同じDriveフォルダへの画像ファイル保存を担う(要件定義4.6節)

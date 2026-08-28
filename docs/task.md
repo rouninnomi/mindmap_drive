@@ -23,14 +23,17 @@
 - [x] `MindMapRepository.ts` / `AttachmentStorage.ts`: リポジトリインターフェース定義
 - [x] ドメイン層の単体テスト(`MindMap.test.ts`、vitest導入。木構造操作・不変条件・スナップショット復元。`npm test`で実行)
 
-## 2. アプリケーション層(`src/application/`)
+## 2. アプリケーション層(`src/application/`)(完了)
 
-- [ ] `MindMapCatalogService.ts`: listMaps / createMap / renameMap / deleteMap
-- [ ] `MindMapEditingService.ts`
+- [x] `MindMapCatalogService.ts`: listMaps / createMap / renameMap / deleteMap
+- [x] `MindMapEditingService.ts`
   - ドメイン集約メソッドのラップ
   - Undo/Redoスタック(上限50件、redoStackのclearルール)
   - 変更通知(Observer/subscribe)
   - 自動保存のデバウンス(1.5秒)スケジューリング
+  - `flushPendingSave()`: visibilitychange/beforeunload用の即時保存(呼び出しはpresentation層で配線予定)
+- [x] `MindMapRepository`に`create(name)`を追加(`domain-model.md`更新。MapId=DriveのfileIdのためID採番はリポジトリ実装側の責務)
+- [x] アプリケーション層の単体テスト(`MindMapCatalogService.test.ts`, `MindMapEditingService.test.ts`。フェイクリポジトリ+vitestのフェイクタイマーでデバウンス・Undo/Redo上限を検証)
 
 ## 3. インフラ層(`src/infrastructure/drive/`)
 

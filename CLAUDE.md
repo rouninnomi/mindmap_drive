@@ -45,8 +45,8 @@ src/
 
 ## 現在のフェーズ状況
 
-- **現在: ドメイン層(`src/domain/mindmap/`)実装完了**(値オブジェクト、`Node`エンティティ、`MindMap`集約ルート、`MindMapRepository`/`AttachmentStorage`インターフェース、vitestによる単体テスト19件。`npm run build`・`npm test`とも通過確認済み)
-- 次: `docs/task.md` 2節に沿ってアプリケーション層(`src/application/`: `MindMapCatalogService`, `MindMapEditingService`)の実装に着手
+- **現在: アプリケーション層(`src/application/`)実装完了**(`MindMapCatalogService`, `MindMapEditingService`。Undo/Redo・変更通知・自動保存デバウンスを含む。ドメイン層の`MindMapRepository`に`create`メソッドを追加。単体テスト計32件、`npm run build`・`npm test`・`npm run lint`とも通過確認済み)
+- 次: `docs/task.md` 3節に沿ってインフラ層(`src/infrastructure/drive/`: `googleAuth.ts`, `DriveMindMapRepository.ts`, `DriveAttachmentStorage.ts`)の実装に着手。着手前にGoogle Cloud Console側のOAuthクライアントID発行(ユーザー手動作業)が必要
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
 このセクションはフェーズが進むたびに更新すること。
