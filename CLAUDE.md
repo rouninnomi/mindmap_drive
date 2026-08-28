@@ -14,7 +14,7 @@
 - React + TypeScript
 - DDD(ドメイン駆動設計)のレイヤリングを採用する
 
-### 想定ディレクトリ構成(実装フェーズで作成予定。現時点では未作成)
+### ディレクトリ構成(スケルトン作成済み。中身は`docs/task.md`に沿って実装中)
 
 ```
 src/
@@ -37,6 +37,11 @@ src/
 - `docs/task.md` — 実装タスク一覧(作成済み)
 
 ドキュメントは日本語で書く。コード中の識別子・コメントは英語命名を基本とする。
+
+## リポジトリ
+
+- GitHub: https://github.com/rouninnomi/mindmap_drive (Private)
+- ローカル `master` ブランチが `origin/master` と紐付き済み
 
 ## 現在のフェーズ状況
 
