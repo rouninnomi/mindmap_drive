@@ -45,7 +45,7 @@ src/
 
 ## 現在のフェーズ状況
 
-- **現在: 全4層の実装完了に加え、マップ編集画面をアウトライン(箇条書き)表示からノード&エッジのキャンバス表示へ変更(ユーザー要望)。実際のGoogleアカウントでの結合動作確認も実施済み**
+- **現在: `docs/task.md` の実装タスクはコード側で対応可能な範囲がすべて完了(5節「仕上げ」含む)。残るのはユーザー側の手動作業のみ**
   - 表示方式変更の詳細は`docs/requirements.md` 3節・4.3節末尾の注記、`docs/architecture.md` 3.5節、`docs/task.md` 4.5節を参照。`@xyflow/react`(React Flow)+`d3-hierarchy`で自動レイアウトのキャンバスを構築し、ドラッグ&ドロップでの再親子付け(`MindMap.moveNode`をドメイン層に新規追加)に対応した。ドメイン層の親子ツリー構造自体は変更していない
   - プレゼンテーション層(`src/presentation/`): `useMindMapCatalog`/`useMindMapEditor`フック、`LoginButton`、`MapListPage`、`MapEditorPage`(React Flowキャンバス)/`MindMapCanvasNode`、`AttachmentViewer`、`Toolbar`、`canvasLayout.ts`を実装
   - キーボードショートカットは要件定義4.3節の表を一部実装時に調整(`Tab`はインデント動作、折りたたみは`Ctrl+/`、画像添付は`Ctrl+I`など。詳細は`docs/requirements.md` 4.3節の注記と`MapEditorPage.tsx`冒頭コメント参照)
@@ -53,8 +53,12 @@ src/
   - **既知の軽微な課題**: Enterキーでの新規ノード作成直後の自動フォーカスが、React Flow自身の内部再描画とのタイミング競合によりまれに効かないことがある(`docs/task.md` 4.5節参照)
   - 単体テスト計40件、`npm run build`・`npm test`・`npm run lint`とも通過確認済み
   - **Google Cloud Console**: 専用プロジェクト`mindmap-drive`(プロジェクトID: `mindmap-drive-506913`)、OAuthクライアントID発行済み、`.env`設定済み。本番デプロイ先が決まったらそのオリジンを承認済みJavaScript生成元に追加要
-  - **未検証**: 画像添付(`Ctrl+I`、ネイティブファイル選択ダイアログのため自動化不可)、真の狭幅(スマホ実機)ビューポートでの目視確認(自動化環境のブラウザウィンドウが約630px未満に縮小できなかったため)
-- 次: `docs/task.md` 5節「仕上げ」— 静的ホスティング先の選定・デプロイ設定、README整備。上記未検証項目の実機確認もユーザー側で実施
+  - 画像添付(`Ctrl+I`)はclaude-in-chromeのfile_uploadツールで確認済み(アップロード・保存・サムネイル表示・Undo/Redo・再読み込みでの復元すべて正常動作)
+  - **未検証**: 真の狭幅(スマホ実機)ビューポートでの目視確認(自動化環境のブラウザウィンドウが約630px未満に縮小できなかったため)
+  - 手動での結合確認(マップ作成→編集→画像添付→Undo/Redo→自動保存→再読み込みでの復元)も実施済み
+  - `README.md`を新規作成(セットアップ手順・Google Cloud設定手順・コマンド一覧・デプロイ手順)
+  - **デプロイ先はVercelを選定**(リポジトリがPrivateなためGitHub Pagesは有料プラン等が必要になる点を踏まえてユーザーが選択)。Vite製SPAのためVercel側の追加設定ファイルは不要、手順は`README.md`の「デプロイ(Vercel)」節を参照
+- **次にユーザー側で必要な作業(このセッションでは実施不可)**: Vercelアカウント作成・このリポジトリのインポート・環境変数`VITE_GOOGLE_CLIENT_ID`の設定・デプロイ後、割り当てられたドメインをGoogle Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に追加。真の狭幅ビューポートでの実機確認もあれば尚可
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
 このセクションはフェーズが進むたびに更新すること。
