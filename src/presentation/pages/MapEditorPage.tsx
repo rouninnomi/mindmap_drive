@@ -1,11 +1,30 @@
+import {
+  Background,
+  Controls,
+  ReactFlow,
+  useEdgesState,
+  useNodesState,
+  type Edge,
+  type OnNodeDrag,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 import { useCallback, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { AttachmentId, MapId, NodeId } from '../../domain/mindmap/valueObjects'
-import { MapName, NodeText } from '../../domain/mindmap/valueObjects'
+import { MapName, NodeId as NodeIdValueObject, NodeText } from '../../domain/mindmap/valueObjects'
+import {
+  CANVAS_NODE_HEIGHT,
+  CANVAS_NODE_WIDTH,
+  computeCanvasLayout,
+  MIND_MAP_NODE_TYPE,
+  type MindMapFlowNode,
+} from '../canvasLayout'
+import { MindMapCanvasNode } from '../components/MindMapCanvasNode'
 import { OutlineEditorContext, type OutlineEditorContextValue } from '../components/OutlineEditorContext'
-import { OutlineNode } from '../components/OutlineNode'
 import { Toolbar } from '../components/Toolbar'
 import { useMindMapEditor } from '../hooks/useMindMapEditor'
 import { flattenVisibleNodes } from '../outlineTree'
+
+const NODE_TYPES = { [MIND_MAP_NODE_TYPE]: MindMapCanvasNode }
 
 interface MapEditorPageProps {
   mapId: MapId
@@ -13,24 +32,38 @@ interface MapEditorPageProps {
 }
 
 /**
- * マップ編集画面: アウトライン編集UI・キーボードショートカット(要件定義4.3節)。
+ * マップ編集画面: ノード&エッジのキャンバス表示(React Flow)によるアウトライン編集。
  *
- * 要件定義4.3節の表と異なる点(通常のテキスト入力と衝突するため実装時に調整した):
+ * ノードの座標はドメイン層に保存せず、木構造から`computeCanvasLayout`で毎回自動計算する
+ * (ユーザーが指定要望した「自動レイアウト」方式)。ノードをドラッグして別のノードに
+ * 重ねて離すと、そのノードの子として再親子付けされる(`editor.moveNode`)。有効な
+ * ドロップ先が無ければ、レイアウトの再計算により元の位置へ自動的に戻る(座標を
+ * 保存していないため、これは追加コード無しで自然に実現される)。
+ *
+ * 要件定義4.3節の表と異なる点(通常のテキスト入力と衝突するため実装時に調整した。
+ * 詳細は`docs/requirements.md` 4.3節の注記を参照):
+ * - 子ノード追加: 表では「Tab」だが、MindMup本来の挙動(ドラッグでの再親子付けと
+ *   同様に「インデント」)として実装。新規の子ノードは「Enterで兄弟追加→Tabで
+ *   インデント」、またはドラッグ&ドロップで作成する
  * - 折りたたみ/展開: 表では「/」または「F」だが、テキスト入力中に文字として
  *   衝突するため`Ctrl+/`に変更
  * - 画像添付: 表では「I」だが、同様の理由で`Ctrl+I`に変更
  * - ノード間移動の←→: テキストカーソルの左右移動という標準動作を優先し、
- *   ノード間移動には割り当てない(↑↓のみノード間移動に使う)
+ *   ノード間移動には割り当てない(↑↓のみ、DFS順で前後のノードへ移動する)
  * - Esc(「ルートに戻る/表示リセット」): v1にズーム機能はないため、
  *   フォーカスを外す(blur)動作として扱う
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
 
+  const [nodes, setNodes, onNodesChange] = useNodesState<MindMapFlowNode>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+
   const inputsRef = useRef(new Map<string, HTMLInputElement>())
   const pendingFocusRef = useRef<string | null>(null)
   const attachTargetRef = useRef<NodeId | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const isDraggingRef = useRef(false)
 
   const flattened = useMemo(() => {
     if (!snapshot.map) {
@@ -42,6 +75,22 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.map, snapshot.version])
 
+  // 構造・内容が変わるたびにレイアウトを再計算する。ドラッグ中は、ユーザーが
+  // 動かしている最中の見た目を保つため再計算をスキップする。
+  useEffect(() => {
+    if (isDraggingRef.current) {
+      return
+    }
+    if (!snapshot.map) {
+      setNodes([])
+      setEdges([])
+      return
+    }
+    const layout = computeCanvasLayout(snapshot.map.rootNode)
+    setNodes(layout.nodes)
+    setEdges(layout.edges)
+  }, [snapshot.map, snapshot.version, setNodes, setEdges])
+
   // マップ読み込み直後、トップレベルノードが1つもなければ最初の空ノードを用意する
   // (「思考のスピードを止めない」ため、すぐ入力を始められるようにする)。
   useEffect(() => {
@@ -51,14 +100,26 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     }
   }, [snapshot.map, editor])
 
-  // 構造的な変更(ノード追加・削除・インデント等)の直後にフォーカスを復元する。
+  // レイアウト(nodes state)が実際に反映された後にフォーカスを復元する。
+  // snapshot.versionではなくnodesを依存にするのは、setNodesが新しい描画を
+  // スケジュールしてから実際にDOMへ反映されるまでに1レンダー分のずれがあるため。
+  //
+  // React Flow自身も内部の寸法計測(ResizeObserver)に伴い独自にnodesを
+  // 更新することがあり、対象ノードのinputがまだ登録される前にこの effect が
+  // 先に発火することがある。そのため、対象inputが見つかった時だけ
+  // pendingFocusRefを消費する(見つからなければ何もせず、次のnodes変化を待って
+  // 再試行する)。
   useEffect(() => {
     const id = pendingFocusRef.current
-    if (id) {
-      pendingFocusRef.current = null
-      inputsRef.current.get(id)?.focus()
+    if (!id) {
+      return
     }
-  }, [snapshot.version])
+    const el = inputsRef.current.get(id)
+    if (el) {
+      pendingFocusRef.current = null
+      el.focus()
+    }
+  }, [nodes])
 
   const registerInput = useCallback((id: string, el: HTMLInputElement | null) => {
     if (el) {
@@ -113,8 +174,6 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
 
       if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        // Undo/Redoは構造変更を伴いinputが再マウントされうるため、同じノードIDへの
-        // フォーカス復元を試みる(存在しなくなっていれば単に何も起きない)。
         pendingFocusRef.current = nodeId.value
         editor.undo()
         return
@@ -203,6 +262,46 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [editor, flattened],
   )
 
+  const handleNodeDragStart = useCallback<OnNodeDrag<MindMapFlowNode>>(() => {
+    isDraggingRef.current = true
+  }, [])
+
+  const handleNodeDragStop = useCallback<OnNodeDrag<MindMapFlowNode>>(
+    (_event, draggedNode) => {
+      isDraggingRef.current = false
+
+      const centerX = draggedNode.position.x + CANVAS_NODE_WIDTH / 2
+      const centerY = draggedNode.position.y + CANVAS_NODE_HEIGHT / 2
+
+      const target = nodes.find(
+        (candidate) =>
+          candidate.id !== draggedNode.id &&
+          centerX >= candidate.position.x &&
+          centerX <= candidate.position.x + CANVAS_NODE_WIDTH &&
+          centerY >= candidate.position.y &&
+          centerY <= candidate.position.y + CANVAS_NODE_HEIGHT,
+      )
+
+      if (target) {
+        try {
+          editor.moveNode(NodeIdValueObject.of(draggedNode.id), NodeIdValueObject.of(target.id))
+        } catch {
+          // 自分自身の子孫へドロップした場合など、無効な再親子付けは無視して
+          // レイアウト再計算により元の位置へ戻す。
+        }
+      }
+
+      // ドラッグの結果に関わらず、正しいレイアウト位置へスナップさせる
+      // (座標を保存しない自動レイアウト方式のため)。
+      if (snapshot.map) {
+        const layout = computeCanvasLayout(snapshot.map.rootNode)
+        setNodes(layout.nodes)
+        setEdges(layout.edges)
+      }
+    },
+    [editor, nodes, snapshot.map, setNodes, setEdges],
+  )
+
   const handleRename = useCallback(() => {
     if (!snapshot.map) {
       return
@@ -238,13 +337,27 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         onBack={onBack}
         onRename={handleRename}
       />
-      <OutlineEditorContext.Provider value={contextValue}>
-        <ul className="outline-root">
-          {snapshot.map.rootNode.children.map((child) => (
-            <OutlineNode key={child.id.value} node={child} />
-          ))}
-        </ul>
-      </OutlineEditorContext.Provider>
+      <div className="mindmap-canvas">
+        <OutlineEditorContext.Provider value={contextValue}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={NODE_TYPES}
+            onNodeDragStart={handleNodeDragStart}
+            onNodeDragStop={handleNodeDragStop}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            nodesFocusable={false}
+            proOptions={{ hideAttribution: true }}
+            fitView
+          >
+            <Background />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </OutlineEditorContext.Provider>
+      </div>
       <input
         ref={fileInputRef}
         type="file"

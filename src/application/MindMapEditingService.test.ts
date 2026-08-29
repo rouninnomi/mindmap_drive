@@ -157,6 +157,20 @@ describe('MindMapEditingService', () => {
     expect(topLevelTexts(map)).toEqual(['B'])
   })
 
+  it('moveNodeでドラッグ&ドロップの再親子付けができ、undoで取り消せる', async () => {
+    const { service, map } = await loadedService()
+
+    const a = service.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = service.addSiblingNode(a, NodeText.of('B'))
+    service.moveNode(b, a)
+
+    expect(topLevelTexts(map)).toEqual(['A'])
+    expect(map.rootNode.findById(a)?.children.map((n) => n.text.value)).toEqual(['B'])
+
+    service.undo()
+    expect(topLevelTexts(map)).toEqual(['A', 'B'])
+  })
+
   it('undoStackは上限50件を超えると古いものから破棄される', async () => {
     const { service, map } = await loadedService()
 

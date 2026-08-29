@@ -85,7 +85,7 @@ interface AttachmentStorage {
 
 MindMap集約が常に保証すべきルール:
 
-1. 循環参照を作らない(あるノードを自分自身の子孫の位置に移動できない)
+1. 循環参照を作らない(あるノードを自分自身の子孫の位置に移動できない)。`indent`/`outdent`/`moveUp`/`moveDown`は既存の親子関係の中でのみノードを動かすため構造上循環しないが、任意のノード間で再親子付けする`moveNode`(ドラッグ&ドロップ対応、実装時に追加)ではこのチェックが実際に機能する
 2. ノードを削除すると、その子孫ノードもすべて削除される(カスケード削除。要件定義4.2節)
 3. マップ名(MapName)は空にできない
 4. ノードのテキストは空でもよい(空ノードの一時的な存在を許容し、入力速度を優先する。要件定義4.3節の「思考のスピードを止めない」方針に対応)
@@ -98,6 +98,7 @@ MindMap集約が常に保証すべきルール:
 - `addChildNode(parentNodeId, text)` — 子ノードを追加(Tab)
 - `indent(nodeId)` / `outdent(nodeId)` — 階層変更(Tab / Shift+Tab)
 - `moveUp(nodeId)` / `moveDown(nodeId)` — 同階層内の並び替え(Ctrl+↑/↓)
+- `moveNode(nodeId, newParentId)` — 任意の別ノードの子として再親子付け(ドラッグ&ドロップ対応。実装時に追加。循環参照は例外で禁止)
 - `deleteNode(nodeId)` — カスケード削除
 - `toggleCollapse(nodeId)` — 折りたたみ/展開
 - `updateText(nodeId, text)` — テキスト編集

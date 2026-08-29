@@ -91,6 +91,10 @@ export class MindMapEditingService {
     this.mutate((map) => map.deleteNode(nodeId))
   }
 
+  moveNode(nodeId: NodeId, newParentId: NodeId): void {
+    this.mutate((map) => map.moveNode(nodeId, newParentId))
+  }
+
   toggleCollapse(nodeId: NodeId): void {
     this.mutate((map) => map.toggleCollapse(nodeId))
   }

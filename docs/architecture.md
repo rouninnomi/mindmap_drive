@@ -75,6 +75,16 @@ function useMindMapEditor(mapId: MapId) {
 - これにより `domain/` `application/` は完全にReact非依存を保ったまま、presentation層だけがReactの再レンダリングと接続する
 - マップ一覧画面(`MindMapCatalogService`)は状態がシンプルなため、通常の `useState` + `useEffect` で十分
 
+## 3.5. マップ編集画面の表示方式(実装時に追加)
+
+要件定義4.3節の注記のとおり、マップ編集画面はアウトライン(箇条書き)表示ではなく、ノード&エッジのキャンバス表示を採用する。
+
+- **描画ライブラリ**: `@xyflow/react`(React Flow)を採用。ノードのドラッグ、パン・ズーム、エッジ描画を自前実装せずに済み、個人開発で開発・運用コストを最小限に抑える方針(CLAUDE.md)に合う
+- **レイアウト方式**: `d3-hierarchy` の `tree()` レイアウトで、MindMap集約の木構造から毎回ノード座標を自動計算する(`src/presentation/canvasLayout.ts`)。ノードの座標はドメイン層・JSONスキーマのどちらにも保存しない。折りたたまれたノードの子孫はレイアウト計算・描画の対象から除外する
+- **ドラッグ&ドロップでの再親子付け**: ノードをドラッグして別のノードへドロップすると、React Flowの`onNodeDragStop`でドロップ位置と重なるノードを当たり判定し、`MindMapEditingService.moveNode(nodeId, newParentId)`を呼ぶ。有効な移動先が無ければ、次のレイアウト再計算で自動的に元の位置へスナップする(座標を保存しない設計の副次効果)
+- **ノードの中身**: 各ノードはReact Flowのカスタムノード(`src/presentation/components/MindMapCanvasNode.tsx`)として、テキスト入力欄・折りたたみトグル・添付画像インジケータを持つ箱として描画する。テキスト入力欄は通常の`<input>`要素とし、キーボードショートカット(要件定義4.3節)はこの入力欄の`onKeyDown`で処理する(アウトライン表示から変更なし)
+- React Flowの`nodesFocusable`はfalseにし、ノードのラッパー要素ではなく内部の`<input>`がフォーカスを受け取るようにする
+
 ## 4. Google Drive連携の詳細設計
 
 ### 4.1 認証
@@ -160,13 +170,16 @@ src/
       MapListPage.tsx
       MapEditorPage.tsx
     components/
-      OutlineNode.tsx
+      MindMapCanvasNode.tsx  # 実装時に変更: OutlineNode.tsxから、React Flowカスタムノードへ置き換え(3.5節)
+      OutlineEditorContext.ts # 実装時に追加: ノード操作系コールバックのContext(旧OutlineNode時代から流用)
       Toolbar.tsx
       AttachmentViewer.tsx
       LoginButton.tsx
     hooks/
       useMindMapEditor.ts
       useMindMapCatalog.ts
+    canvasLayout.ts           # 実装時に追加: 木構造→React Flowのnodes/edges変換(3.5節)
+    outlineTree.ts            # 実装時に追加: DFS順の平坦化(矢印キーでのノード間移動に使用)
 ```
 
 ## 7. 次のステップ

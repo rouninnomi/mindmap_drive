@@ -101,6 +101,43 @@ describe('MindMap', () => {
     expect(topLevelTexts(map)).toEqual(['A', 'B'])
   })
 
+  it('moveNodeで任意のノードの子として付け替えられる(ドラッグ&ドロップの再親子付け)', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addSiblingNode(a, NodeText.of('B'))
+    const c = map.addChildNode(a, NodeText.of('C'))
+
+    map.moveNode(b, c)
+
+    expect(topLevelTexts(map)).toEqual(['A'])
+    const nodeC = map.rootNode.findById(c)
+    expect(nodeC?.children.map((n) => n.text.value)).toEqual(['B'])
+  })
+
+  it('moveNodeで移動すると子孫の構造も一緒に移動する', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addSiblingNode(a, NodeText.of('B'))
+    const child = map.addChildNode(a, NodeText.of('Aの子'))
+
+    map.moveNode(a, b)
+
+    expect(topLevelTexts(map)).toEqual(['B'])
+    const nodeB = map.rootNode.findById(b)
+    expect(nodeB?.children.map((n) => n.text.value)).toEqual(['A'])
+    expect(map.rootNode.findById(a)?.children.map((n) => n.text.value)).toEqual(['Aの子'])
+    expect(map.rootNode.findById(child)).toBeDefined()
+  })
+
+  it('moveNodeは自分自身の子孫への移動(循環参照)を禁止する', () => {
+    const map = newMap()
+    const parent = map.addChildNode(map.rootNode.id, NodeText.of('親'))
+    const child = map.addChildNode(parent, NodeText.of('子'))
+
+    expect(() => map.moveNode(parent, child)).toThrow()
+    expect(() => map.moveNode(parent, parent)).toThrow()
+  })
+
   it('deleteNodeは子孫ノードもまとめてカスケード削除する', () => {
     const map = newMap()
     const parent = map.addChildNode(map.rootNode.id, NodeText.of('親'))

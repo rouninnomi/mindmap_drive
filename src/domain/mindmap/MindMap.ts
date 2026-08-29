@@ -120,6 +120,25 @@ export class MindMap {
     this.touch()
   }
 
+  /**
+   * ノード(とその子孫全体)を任意の別ノードの子として移動する
+   * (ドラッグ&ドロップでの自由な再親子付けに対応)。
+   * 自分自身、または自分の子孫への移動は循環参照になるため禁止する
+   * (domain-model.md 7節 不変条件1)。
+   */
+  moveNode(nodeId: NodeId, newParentId: NodeId): void {
+    const node = this.findNodeOrThrow(nodeId)
+    const newParent = this.findNodeOrThrow(newParentId)
+    if (node.findById(newParentId)) {
+      throw new Error(`Cannot move a node into itself or its own descendant: ${nodeId.value}`)
+    }
+    const oldParent = this.findParentOrThrow(nodeId)
+    const index = oldParent.indexOfChild(nodeId)
+    oldParent.removeChildAt(index)
+    newParent.appendChild(node)
+    this.touch()
+  }
+
   /** ノードを削除する。子孫ノードもすべて削除される(カスケード削除)。 */
   deleteNode(nodeId: NodeId): void {
     const parent = this.findParentOrThrow(nodeId)
