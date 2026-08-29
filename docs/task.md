@@ -82,7 +82,7 @@
   - [x] `.github/workflows/deploy.yml`: pushをトリガーにビルド→GitHub Pagesへ自動デプロイ
   - [x] `vite.config.ts`: `GITHUB_PAGES`環境変数が立っている時のみ`base: '/mindmap_drive/'`を設定(プロジェクトページ配信のパス対応)
   - 公開URL: `https://rouninnomi.github.io/mindmap_drive/`
-  - [ ] Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に上記オリジンを追加(次のステップで実施)
+  - [x] Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に上記オリジンを追加済み
 - [x] READMEの整備(セットアップ手順、Google Cloud設定手順、コマンド一覧、デプロイ手順)
 
 ## 進め方の原則

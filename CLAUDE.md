@@ -58,7 +58,8 @@ src/
   - 手動での結合確認(マップ作成→編集→画像添付→Undo/Redo→自動保存→再読み込みでの復元)も実施済み
   - `README.md`を新規作成(セットアップ手順・Google Cloud設定手順・コマンド一覧・デプロイ手順)
   - **デプロイ先はGitHub Pagesに決定**(当初Vercelを検討したが、リポジトリをPublic化する方針に変更したため切り替え)。`gh` CLIをインストールのうえ、リポジトリのPublic化・`VITE_GOOGLE_CLIENT_ID`のリポジトリシークレット登録・GitHub Pages有効化(ソース: GitHub Actions)を実施済み。`.github/workflows/deploy.yml`でpushをトリガーに自動デプロイする。公開URL: `https://rouninnomi.github.io/mindmap_drive/`
-- **次に必要な作業**: Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に `https://rouninnomi.github.io` を追加(次のステップで実施)。真の狭幅ビューポートでの実機確認もあれば尚可
+  - Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に `https://rouninnomi.github.io` を追加済み
+- 残っているのは真の狭幅(スマホ実機)ビューポートでの目視確認のみ(あれば尚可、必須ではない)
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
 このセクションはフェーズが進むたびに更新すること。
