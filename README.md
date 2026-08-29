@@ -91,15 +91,14 @@ src/
 
 プロジェクト全体の方針・現在のフェーズ状況は [`CLAUDE.md`](./CLAUDE.md) にまとめている。
 
-## デプロイ(Vercel)
+## デプロイ(GitHub Pages)
 
-Vite製の静的SPAなので、Vercelはビルド設定を自動検出する(ビルドコマンド`npm run build`、出力ディレクトリ`dist`。`vercel.json`等の追加設定ファイルは不要)。
+`master`ブランチへのpushをトリガーに、GitHub Actions(`.github/workflows/deploy.yml`)がビルドしてGitHub Pagesへ自動デプロイする。
 
-1. [Vercel](https://vercel.com/) にGitHubアカウントでサインインする
-2. 「Add New... → Project」からこのリポジトリ(Private)をインポートする
-3. プロジェクトの環境変数に `VITE_GOOGLE_CLIENT_ID` を設定する(値は`.env`と同じクライアントID)
-4. デプロイを実行し、割り当てられたドメイン(例: `xxx.vercel.app`。独自ドメインを設定した場合はそちら)を確認する
-5. Google Cloud Consoleの対象OAuthクライアントIDを開き、「承認済みのJavaScript生成元」に手順4のオリジン(`https://xxx.vercel.app`)を追加する
-6. 以降、`master`ブランチへのpushでVercelが自動的に再デプロイする
+- 公開URL: <https://rouninnomi.github.io/mindmap_drive/>
+- リポジトリはPublic(GitHub Pagesを無料で使うため)。マインドマップのデータ自体は各自のGoogle Driveに保存されるため、ソースコード・設計ドキュメントが公開されるのみで、マップの内容が公開されることはない
+- ビルド時の環境変数 `VITE_GOOGLE_CLIENT_ID` はリポジトリシークレット(Settings → Secrets and variables → Actions)から注入する
+- プロジェクトページ配信(`https://<user>.github.io/<repo>/`)のため、`vite.config.ts`で`GITHUB_PAGES`環境変数が立っている時だけ`base: '/mindmap_drive/'`を設定している(ローカル開発・プレビューには影響しない)
+- Google Cloud ConsoleのOAuthクライアントIDの「承認済みのJavaScript生成元」に `https://rouninnomi.github.io` の登録が必要(`http://localhost:5173`と並べて追加する)
 
-上記のVercelアカウント作成・プロジェクトインポート・環境変数設定は、外部サービスのアカウント操作にあたるためユーザー自身で行う必要がある。
+初回セットアップ(`gh` CLIで実施済み): リポジトリのPublic化、リポジトリシークレット`VITE_GOOGLE_CLIENT_ID`の登録、GitHub Pagesの有効化(ソース: GitHub Actions)。同種のアプリを新たにデプロイする場合はこの3点を先に行うこと。

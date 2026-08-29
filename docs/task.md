@@ -78,8 +78,11 @@
 ## 5. 仕上げ
 
 - [x] 手動での結合確認(マップ作成 → 編集 → 画像添付 → Undo/Redo → 自動保存 → 再読み込みで復元)。claude-in-chromeスキルで実施、いずれも正常動作
-- [x] 静的ホスティングへのデプロイ設定: Vercelを選定(リポジトリがPrivateなため、GitHub Pagesは有料プランかリポジトリのPublic化が必要になる点を踏まえてユーザーが選択)。手順を`README.md`に記載。Vite製SPAのためVercel側の追加設定ファイルは不要(ビルド設定を自動検出)
-  - [ ] 実際のVercelアカウント作成・プロジェクトインポート・環境変数設定・デプロイ後のオリジンをGoogle Cloud Consoleへ追加、はユーザー側の作業(外部サービスのアカウント操作のため)
+- [x] 静的ホスティングへのデプロイ設定: 当初Vercelを選定したが、その後リポジトリをPublic化する方針に変更したためGitHub Pagesへ切り替えた(`gh` CLIで実施: リポジトリのPublic化、`VITE_GOOGLE_CLIENT_ID`のリポジトリシークレット登録、GitHub Pages有効化(ソース: GitHub Actions))
+  - [x] `.github/workflows/deploy.yml`: pushをトリガーにビルド→GitHub Pagesへ自動デプロイ
+  - [x] `vite.config.ts`: `GITHUB_PAGES`環境変数が立っている時のみ`base: '/mindmap_drive/'`を設定(プロジェクトページ配信のパス対応)
+  - 公開URL: `https://rouninnomi.github.io/mindmap_drive/`
+  - [ ] Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に上記オリジンを追加(次のステップで実施)
 - [x] READMEの整備(セットアップ手順、Google Cloud設定手順、コマンド一覧、デプロイ手順)
 
 ## 進め方の原則
