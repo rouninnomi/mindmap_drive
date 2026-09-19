@@ -1,9 +1,18 @@
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client'
 const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
+const SESSION_STORAGE_KEY = 'mindmap_drive_google_token'
+// トークンの実際の有効期限より早めに失効扱いにし、期限ぎりぎりでのAPI呼び出し失敗を防ぐ
+const EXPIRY_SAFETY_MARGIN_MS = 60_000
 
 interface GoogleTokenResponse {
   access_token?: string
+  expires_in?: number
   error?: string
+}
+
+interface StoredToken {
+  accessToken: string
+  expiresAt: number
 }
 
 interface GoogleTokenClient {
@@ -45,8 +54,13 @@ interface PendingTokenRequest {
 
 /**
  * Google Identity Services (GIS) のトークンクライアントを用いた認証アダプタ
- * (architecture.md 4.1節)。アクセストークンはメモリ上にのみ保持し、
- * 永続化はしない。
+ * (architecture.md 4.1節)。リフレッシュトークンは扱わない(トークンクライアント
+ * 方式のため)方針は変わらないが、取得済みのアクセストークン(短命)は
+ * `sessionStorage`にも保持し、同じタブでのページ再読み込みのたびにログインし
+ * 直す必要がないようにする(タブを閉じれば消える。ユーザーフィードバックにより追加。
+ * 無言の再認可(prompt: '')はGISの実装上ポップアップを使うため、ページ読み込み時のような
+ * ユーザー操作を伴わないタイミングではブラウザのポップアップブロックにより
+ * ほぼ確実に失敗する。そのため、まずこの永続化されたトークンを使う経路を優先する)。
  */
 export class GoogleAuth {
   private readonly clientId: string
@@ -57,6 +71,7 @@ export class GoogleAuth {
 
   constructor(clientId: string) {
     this.clientId = clientId
+    this.accessToken = this.loadStoredToken()
   }
 
   isSignedIn(): boolean {
@@ -73,6 +88,7 @@ export class GoogleAuth {
       window.google.accounts.oauth2.revoke(this.accessToken)
     }
     this.accessToken = null
+    this.clearStoredToken()
   }
 
   /**
@@ -88,6 +104,41 @@ export class GoogleAuth {
       return await this.requestToken('')
     } catch {
       throw new GoogleAuthRequiredError()
+    }
+  }
+
+  private loadStoredToken(): string | null {
+    try {
+      const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+      if (!raw) {
+        return null
+      }
+      const stored = JSON.parse(raw) as StoredToken
+      if (stored.expiresAt <= Date.now()) {
+        sessionStorage.removeItem(SESSION_STORAGE_KEY)
+        return null
+      }
+      return stored.accessToken
+    } catch {
+      return null
+    }
+  }
+
+  private saveStoredToken(accessToken: string, expiresInSeconds: number | undefined): void {
+    const expiresAt = Date.now() + (expiresInSeconds ?? 3600) * 1000 - EXPIRY_SAFETY_MARGIN_MS
+    const stored: StoredToken = { accessToken, expiresAt }
+    try {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stored))
+    } catch {
+      // プライベートブラウジング等でsessionStorageが使えない場合は、メモリ保持のみで諦める
+    }
+  }
+
+  private clearStoredToken(): void {
+    try {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    } catch {
+      // noop
     }
   }
 
@@ -107,6 +158,7 @@ export class GoogleAuth {
       return
     }
     this.accessToken = response.access_token
+    this.saveStoredToken(this.accessToken, response.expires_in)
     pending?.resolve(this.accessToken)
   }
 

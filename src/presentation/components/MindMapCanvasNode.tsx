@@ -1,11 +1,26 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type PointerEvent } from 'react'
 import { CANVAS_NODE_HEIGHT, CANVAS_NODE_WIDTH, type MindMapFlowNode } from '../canvasLayout'
 import { AttachmentViewer } from './AttachmentViewer'
 import { useOutlineEditorContext } from './OutlineEditorContext'
 
 const CLICK_MOVE_THRESHOLD_PX = 5
 const DOUBLE_CLICK_MS = 400
+
+/**
+ * このノードを離れる(兄弟/子ノード作成、他ノードへの移動、Undo/Redo)キー操作の
+ * 直前だけドメインへテキストをコミットするかどうかを判定する。普通の文字入力の
+ * たびにコミットしていると、自動保存(1.5秒デバウンス)やUndoスタックへの記録が
+ * 一文字ごとに発生し、連続して文字を打っている最中に自動保存が頻繁に挟まって
+ * しまう(ユーザーフィードバックにより判明)。ノードの編集が一区切りつくタイミング
+ * でのみコミットすることで、これを避ける。
+ */
+function isTextCommitTriggerKey(event: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
+  if (event.ctrlKey || event.metaKey) {
+    return event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y'
+  }
+  return event.key === 'Enter' || event.key === 'Tab' || event.key === 'Escape' || event.key === 'ArrowUp' || event.key === 'ArrowDown'
+}
 
 /**
  * キャンバス上の1ノードを表す箱型のReact Flowカスタムノード。
@@ -27,6 +42,10 @@ const DOUBLE_CLICK_MS = 400
  * ドラッグ移動できるようにしている)。この場合、ネイティブの`click`イベントは
  * React Flow自身のドラッグ判定によって発火しないことがあるため、選択操作は
  * `onClick`ではなくpointerdown/upの移動量で自前判定している(下記ハンドラのコメント参照)。
+ *
+ * 画像添付は`Ctrl+I`・ファイルのドラッグ&ドロップに加え、`Ctrl+V`でのクリップボード画像
+ * 貼り付けにも対応する(選択中・文字入力中どちらでも動作するよう、ラッパーと`<input>`
+ * 両方に同じ`onPaste`ハンドラを付けている)。
  */
 export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
   const node = data.node
@@ -152,6 +171,28 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
     }
   }
 
+  // Webページ等からコピーした画像を`Ctrl+V`で直接添付できるようにする。
+  // 選択中(ラッパーにフォーカス)・文字入力中(inputにフォーカス)どちらでも動作するよう、
+  // 両方の要素に同じハンドラを付けている。文字入力中は`<input>`で発生したpasteイベントが
+  // 外側のラッパーへもバブリングするため、二重に添付されないよう`stopPropagation`する。
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement | HTMLInputElement>): void => {
+    const items = event.clipboardData?.items
+    if (!items) {
+      return
+    }
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          event.preventDefault()
+          event.stopPropagation()
+          handleDropImage(node.id, file)
+        }
+        return
+      }
+    }
+  }
+
   // ノード本体をドラッグでつかんで再親子付けできるよう、テキスト表示部分も
   // (`nodrag`を付けず)React Flowのドラッグ対象にしている。そのため、押した位置から
   // ほぼ動かず離した場合だけを「クリック」とみなす必要がある(通常の`onClick`だと、
@@ -197,6 +238,7 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onPaste={handlePaste}
     >
       <Handle type="target" position={Position.Left} />
       <div className="mindmap-node-row">
@@ -209,6 +251,7 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
             onChange={(event) => setLocalText(event.target.value)}
             onBlur={commitIfChanged}
             onMouseDownCapture={(event) => event.stopPropagation()}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               // IME変換中(isComposing)にcommitIfChangedを呼ぶと、まだ確定していない
               // 入力途中の文字列をドメインへコミットしてしまい、その結果としての
@@ -218,7 +261,9 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
               if (event.nativeEvent.isComposing) {
                 return
               }
-              commitIfChanged()
+              if (isTextCommitTriggerKey(event)) {
+                commitIfChanged()
+              }
               handleEditingKeyDown(event, node.id, localText)
             }}
           />

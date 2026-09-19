@@ -25,20 +25,28 @@ export function useMindMapEditor(mapId: MapId) {
   }, [editor])
 
   useEffect(() => {
+    // ノードのテキスト編集は、文字入力のたびに自動保存が頻繁に挟まらないよう
+    // Enter/Tab/Esc等でノードを離れる時か`blur`時のみドメインへコミットする
+    // (`MapEditorPage.tsx`冒頭コメント参照)。そのため、まだコミットされていない
+    // 入力中の文字がある状態でタブを離れる/閉じる場合に備え、保存前にフォーカス中の
+    // 要素を明示的に`blur()`してコミットを強制してから保存する。
+    const flushActiveEditAndSave = (): void => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+      void editor.flushPendingSave()
+    }
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'hidden') {
-        void editor.flushPendingSave()
+        flushActiveEditAndSave()
       }
     }
-    const handleBeforeUnload = (): void => {
-      void editor.flushPendingSave()
-    }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('beforeunload', flushActiveEditAndSave)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      void editor.flushPendingSave()
+      window.removeEventListener('beforeunload', flushActiveEditAndSave)
+      flushActiveEditAndSave()
     }
   }, [editor])
 

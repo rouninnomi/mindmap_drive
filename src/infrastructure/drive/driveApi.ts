@@ -48,6 +48,34 @@ export async function ensureAppFolder(auth: AccessTokenProvider): Promise<string
   return created.id
 }
 
+/** 指定した親フォルダ直下のサブフォルダを検索し、なければ作成してそのfileIdを返す。 */
+export async function ensureFolder(
+  auth: AccessTokenProvider,
+  name: string,
+  parentId: string,
+): Promise<string> {
+  const query = encodeURIComponent(
+    `mimeType='${FOLDER_MIME_TYPE}' and name='${name}' and '${parentId}' in parents and trashed=false`,
+  )
+  const searchResponse = await authorizedFetch(
+    auth,
+    `${DRIVE_FILES_URL}?q=${query}&spaces=drive&fields=files(id)`,
+  )
+  const searchResult = (await searchResponse.json()) as { files: { id: string }[] }
+  const existing = searchResult.files[0]
+  if (existing) {
+    return existing.id
+  }
+
+  const createResponse = await authorizedFetch(auth, `${DRIVE_FILES_URL}?fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME_TYPE, parents: [parentId] }),
+  })
+  const created = (await createResponse.json()) as { id: string }
+  return created.id
+}
+
 /** メタデータとバイナリ本体を1リクエストで送るmultipart/relatedボディを組み立てる。 */
 function buildMultipartBody(metadata: Record<string, unknown>, content: Blob, contentType: string, boundary: string): Blob {
   const metadataPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`

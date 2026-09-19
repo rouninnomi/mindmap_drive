@@ -67,9 +67,15 @@ interface MapEditorPageProps {
  * - 文字入力中、日本語入力などIME変換中(`event.isComposing`)は`handleEditingKeyDown`の
  *   先頭で処理をスキップし、ショートカットとして扱わない(怠ると変換確定のEnterで
  *   兄弟ノードが作られ、文章入力の途中で編集が中断されてしまう)。同様に、変換確定前の
- *   通常のキー入力でも`MindMapCanvasNode.tsx`側で`commitIfChanged`の呼び出し自体を
- *   IME変換中はスキップする(変換途中の未確定文字列を`<input>`の`value`へ反映し直す
- *   再レンダリングが走ると、ブラウザが変換を強制的に確定・中断してしまうため)
+ *   通常のキー入力では`MindMapCanvasNode.tsx`側で`commitIfChanged`自体を呼ばない
+ *   (変換途中の未確定文字列を`<input>`の`value`へ反映し直す再レンダリングが走ると、
+ *   ブラウザが変換を強制的に確定・中断してしまうため)
+ * - 文字入力中のドメインへのコミット(`commitText`)は、Enter/Tab/Esc/↑↓/Undo/Redoなど
+ *   ノードを離れる操作の直前と、`blur`時のみ行う(`MindMapCanvasNode.tsx`の
+ *   `isTextCommitTriggerKey`参照)。普通の文字入力のたびにコミットしていると、
+ *   自動保存(1.5秒デバウンス)やUndoスタックへの記録が一文字ごとに発生し、連続して
+ *   文字を打っている最中に自動保存が頻繁に挟まってしまうため(ユーザーフィードバックに
+ *   より変更)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -257,6 +263,10 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'Tab') {
         event.preventDefault()
+        const parentNode = flattened.find((n) => n.id.equals(nodeId))
+        if (parentNode?.collapsed) {
+          editor.toggleCollapse(nodeId)
+        }
         const newId = editor.addChildNode(nodeId, NodeText.empty())
         setSelectedNodeId(newId.value)
         setEditingNodeId(newId.value)
@@ -352,6 +362,10 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'Tab') {
         event.preventDefault()
+        const parentNode = flattened.find((n) => n.id.equals(nodeId))
+        if (parentNode?.collapsed) {
+          editor.toggleCollapse(nodeId)
+        }
         const newId = editor.addChildNode(nodeId, NodeText.empty())
         setSelectedNodeId(newId.value)
         setEditingNodeId(newId.value)

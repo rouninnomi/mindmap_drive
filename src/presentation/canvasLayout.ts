@@ -7,6 +7,12 @@ export const CANVAS_NODE_HEIGHT = 44
 const HORIZONTAL_GAP = 90
 const VERTICAL_GAP = 20
 
+// App.cssの`.attachment-thumbnail`(96px)+`.attachment-viewer`の上下余白(8px)分、
+// 添付ありノードは`.mindmap-node`が縦に伸びる。nodeSizeの1単位(ノード高さ+隙間)に
+// 換算し、余分に確保すべき間隔の目安として使う(実測ではなく概算)。
+const ATTACHMENT_EXTRA_HEIGHT_PX = 96 + 8
+const ATTACHMENT_EXTRA_SEPARATION_UNITS = Math.ceil(ATTACHMENT_EXTRA_HEIGHT_PX / (CANVAS_NODE_HEIGHT + VERTICAL_GAP))
+
 export const MIND_MAP_NODE_TYPE = 'mindMapNode'
 
 export interface CanvasNodeData extends Record<string, unknown> {
@@ -14,6 +20,10 @@ export interface CanvasNodeData extends Record<string, unknown> {
 }
 
 export type MindMapFlowNode = FlowNode<CanvasNodeData>
+
+function extraSeparationUnits(node: DomainNode): number {
+  return node.attachments.length > 0 ? ATTACHMENT_EXTRA_SEPARATION_UNITS : 0
+}
 
 /**
  * MindMap集約の木構造から、React Flow用のノード/エッジ配列を算出する
@@ -30,10 +40,17 @@ export function computeCanvasLayout(root: DomainNode): {
   }
 
   const hierarchyRoot = hierarchy(root, (n) => (n.collapsed ? undefined : [...n.children]))
-  const layout = tree<DomainNode>().nodeSize([
-    CANVAS_NODE_HEIGHT + VERTICAL_GAP,
-    CANVAS_NODE_WIDTH + HORIZONTAL_GAP,
-  ])
+  const layout = tree<DomainNode>()
+    .nodeSize([CANVAS_NODE_HEIGHT + VERTICAL_GAP, CANVAS_NODE_WIDTH + HORIZONTAL_GAP])
+    .separation((a, b) => {
+      // 画像添付付きノードはサムネイル分`.mindmap-node`が縦に大きく伸びるため、
+      // 標準の間隔(nodeSize)のままだと隣接ノードと重なり合ってしまう。
+      // d3-hierarchyはノードごとの可変サイズを直接サポートしないため、
+      // 添付ありノードの間隔を広めに見積もって重なりを避ける(近似値。
+      // `.attachment-viewer`のサムネイル高さ96px+余白分をnodeSize単位に換算)。
+      const base = a.parent === b.parent ? 1 : 2
+      return base + (extraSeparationUnits(a.data) + extraSeparationUnits(b.data)) / 2
+    })
   const positioned = layout(hierarchyRoot)
 
   const nodes: MindMapFlowNode[] = []
