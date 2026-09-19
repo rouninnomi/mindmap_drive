@@ -56,7 +56,7 @@ src/
     - 折りたたみ/展開マーカー(▾/▸)は視認性向上のため拡大し、ノード右側に表示する配置に変更。React Flowの接続ハンドル(丸印)は`nodesConnectable={false}`で無効化しているにもかかわらず十字カーソルが出て紛らわしかったため非表示化した
   - claude-in-chromeスキルでの結合テストで、アウトライン表示時代に以下2件、キャンバス化の際にさらに複数件の不具合を発見・修正済み(詳細はセッション履歴参照。代表例: インデント/アウトデント直後にテキストが失われる不具合、Undo/Redo直後にフォーカスが失われる不具合、React Flowの`.react-flow`要素の高さが0になり描画されない不具合、ノードラッパーがクリックのフォーカスを奪う不具合)
   - **既知の軽微な課題は解消済み**: 新規ノード作成直後の自動フォーカスがまれに効かない不具合は、React Flowが寸法計測を終えるまで新規ノードを`visibility: hidden`で描画することが原因と判明し、見えるようになるまで`requestAnimationFrame`で再試行する方式に修正して解消した(`docs/task.md` 4.5節の記載も解消済みとして更新要)
-  - 単体テスト計40件、`npm run build`・`npm test`・`npm run lint`とも通過確認済み
+  - 単体テスト計45件、`npm run build`・`npm test`・`npm run lint`とも通過確認済み
   - **Google Cloud Console**: 専用プロジェクト`mindmap-drive`(プロジェクトID: `mindmap-drive-506913`)、OAuthクライアントID発行済み、`.env`設定済み。本番デプロイ先が決まったらそのオリジンを承認済みJavaScript生成元に追加要
   - 画像添付(`Ctrl+I`)はclaude-in-chromeのfile_uploadツールで確認済み(アップロード・保存・サムネイル表示・Undo/Redo・再読み込みでの復元すべて正常動作)
   - **未検証**: 真の狭幅(スマホ実機)ビューポートでの目視確認(自動化環境のブラウザウィンドウが約630px未満に縮小できなかったため)
@@ -64,6 +64,13 @@ src/
   - `README.md`を新規作成(セットアップ手順・Google Cloud設定手順・コマンド一覧・デプロイ手順)
   - **デプロイ先はGitHub Pagesに決定**(当初Vercelを検討したが、リポジトリをPublic化する方針に変更したため切り替え)。`gh` CLIをインストールのうえ、リポジトリのPublic化・`VITE_GOOGLE_CLIENT_ID`のリポジトリシークレット登録・GitHub Pages有効化(ソース: GitHub Actions)を実施済み。`.github/workflows/deploy.yml`でpushをトリガーに自動デプロイする。公開URL: `https://rouninnomi.github.io/mindmap_drive/`
   - Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に `https://rouninnomi.github.io` を追加済み
+- **公開後、実際の利用の中でのユーザーフィードバックにより追加した機能・修正(2026-09-19〜20)**
+  - 選択中・文字入力中どちらもEnterで兄弟追加/Tabで子追加に統一(以前は選択中のEnterのみ挙動が違った)。文字入力中の`Shift+Enter`でカーソル位置のテキスト分割(`MindMap.splitNode`)、`Ctrl+クリック`/`Shift+クリック`での兄弟ノード複数選択+`Enter`でのマージ統合(`MindMap.mergeNodes`)、`Ctrl+Shift+9`/`Ctrl+Shift+0`での全展開/全折りたたみ(`MindMap.expandAll`/`collapseAll`。ブラウザの検索(Ctrl+F)用途)を追加
+  - `↑`/`↓`の移動先をDFS順から同じ親を持つ兄弟間のみに変更(子孫へ入り込んでしまい直感に反していたため)。ノードの選択・文字入力開始時に画面中央へ自動パンする機能も追加
+  - 日本語IME変換中に`commitIfChanged`が発火し変換が強制確定・中断される不具合を修正(`event.isComposing`中はコミット・ショートカット処理を両方スキップ)。あわせて、文字入力中の自動保存/Undo記録を一文字ごとではなくEnter/Tab/Esc/↑↓/Undo/Redoなどノードを離れる時のみに変更(自動保存が入力中に頻繁に挟まる問題への対応。副次効果でUndo粒度も改善)
+  - 画像添付に`Ctrl+V`でのクリップボード貼り付けを追加。添付画像を持つノードによるキャンバス上の重なりをレイアウトの`separation`調整で解消。画像保存先を`MindMapDrive`直下から`images/<mapId>/`のマップごとのサブフォルダへ整理(フォルダ作成の競合バグも修正)
+  - Googleアクセストークンを`sessionStorage`に保持し、同一タブでの再読み込みでは再ログイン不要に(無言の再認可はポップアップ方式でユーザー操作を伴わない場面ではほぼ確実に失敗するため)
+  - 一度折りたたんだノードを再展開すると直下の子までの表示に留める(孫以降は畳んだまま)よう`toggleCollapse`を変更(巨大化したマップで孫以降が一気に再展開されるのを防ぐ)
 - 残っているのは真の狭幅(スマホ実機)ビューポートでの目視確認のみ(あれば尚可、必須ではない)
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
