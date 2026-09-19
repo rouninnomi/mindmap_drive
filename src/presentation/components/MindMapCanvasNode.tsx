@@ -191,6 +191,14 @@ export function MindMapCanvasNode({ data }: NodeProps<MindMapFlowNode>) {
             onBlur={commitIfChanged}
             onMouseDownCapture={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
+              // IME変換中(isComposing)にcommitIfChangedを呼ぶと、まだ確定していない
+              // 入力途中の文字列をドメインへコミットしてしまい、その結果としての
+              // 再レンダリングが原因でIMEの変換が強制的に確定・中断されてしまう
+              // (制御された`<input>`の`value`を変換中に書き換えると起こる既知の挙動)。
+              // 変換中は何もせず、ブラウザ・IMEにそのまま処理させる。
+              if (event.nativeEvent.isComposing) {
+                return
+              }
               commitIfChanged()
               handleEditingKeyDown(event, node.id, localText)
             }}

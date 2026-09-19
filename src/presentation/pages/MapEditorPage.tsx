@@ -61,6 +61,12 @@ interface MapEditorPageProps {
  * - ノード間移動の←→: 選択中のみ、←で親ノードへ、→で最初の子ノードへ移動する
  *   (折りたたまれている場合や子が無い場合、→は何もしない)。文字入力中は標準の
  *   テキストカーソル移動を優先し、ノード間移動には割り当てない
+ * - 文字入力中、日本語入力などIME変換中(`event.isComposing`)は`handleEditingKeyDown`の
+ *   先頭で処理をスキップし、ショートカットとして扱わない(怠ると変換確定のEnterで
+ *   兄弟ノードが作られ、文章入力の途中で編集が中断されてしまう)。同様に、変換確定前の
+ *   通常のキー入力でも`MindMapCanvasNode.tsx`側で`commitIfChanged`の呼び出し自体を
+ *   IME変換中はスキップする(変換途中の未確定文字列を`<input>`の`value`へ反映し直す
+ *   再レンダリングが走ると、ブラウザが変換を強制的に確定・中断してしまうため)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -291,6 +297,13 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   // ノードが「文字入力」状態の時のキー操作。
   const handleEditingKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => {
+      // 日本語入力などIMEでの変換候補確定時もEnter/Escapeのkeydownが発火するため、
+      // 変換中(isComposing)はショートカットとして扱わずIMEにそのまま渡す。これを
+      // 怠ると、変換確定のEnterで兄弟ノードが作られ文章入力の途中で編集が中断される。
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        return
+      }
+
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
 
       if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
