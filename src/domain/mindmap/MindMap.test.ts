@@ -37,6 +37,15 @@ describe('MindMap', () => {
     expect(topLevelTexts(map)).toEqual(['A', 'C', 'B'])
   })
 
+  it('splitNodeでテキストを2つに分割し、後半を直後の新規兄弟ノードにする', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('前半後半'))
+    const newId = map.splitNode(a, NodeText.of('前半'), NodeText.of('後半'))
+    expect(topLevelTexts(map)).toEqual(['前半', '後半'])
+    expect(map.rootNode.findById(a)?.text.value).toBe('前半')
+    expect(map.rootNode.findById(newId)?.text.value).toBe('後半')
+  })
+
   it('addChildNodeで既存ノードの子としてノードを追加できる', () => {
     const map = newMap()
     const parent = map.addChildNode(map.rootNode.id, NodeText.of('親'))
@@ -146,6 +155,35 @@ describe('MindMap', () => {
     expect(topLevelTexts(map)).toEqual([])
     expect(map.rootNode.findById(parent)).toBeUndefined()
     expect(map.rootNode.findById(child)).toBeUndefined()
+  })
+
+  it('mergeNodesで兄弟ノードを1つに統合する(テキストは並び順で改行連結、子と添付は先頭ノードへ集約)', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addChildNode(map.rootNode.id, NodeText.of('B'))
+    const c = map.addChildNode(map.rootNode.id, NodeText.of('C'))
+    const childOfB = map.addChildNode(b, NodeText.of('Bの子'))
+    map.attachImage(a, Attachment.create('file-a'))
+    map.attachImage(c, Attachment.create('file-c'))
+
+    // 選択順とツリー上の並び順が違っても、並び順(A,B,C)で連結される
+    const mergedId = map.mergeNodes([c, a, b])
+
+    expect(mergedId.equals(a)).toBe(true)
+    expect(topLevelTexts(map)).toEqual(['A\nB\nC'])
+    expect(map.rootNode.findById(b)).toBeUndefined()
+    expect(map.rootNode.findById(c)).toBeUndefined()
+    const merged = map.rootNode.findById(a)
+    expect(merged?.children.map((n) => n.id.equals(childOfB))).toEqual([true])
+    expect(merged?.attachments.map((att) => att.driveFileId)).toEqual(['file-a', 'file-c'])
+  })
+
+  it('mergeNodesは親が異なるノードを渡すと例外を投げる', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const parent = map.addChildNode(map.rootNode.id, NodeText.of('親'))
+    const child = map.addChildNode(parent, NodeText.of('子'))
+    expect(() => map.mergeNodes([a, child])).toThrow()
   })
 
   it('toggleCollapseで折りたたみ状態が反転する', () => {

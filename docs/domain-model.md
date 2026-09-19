@@ -96,6 +96,7 @@ MindMap集約が常に保証すべきルール:
 
 - `addSiblingNode(afterNodeId, text)` — 兄弟ノードを追加(Enter)
 - `addChildNode(parentNodeId, text)` — 子ノードを追加(Tab)
+- `splitNode(nodeId, beforeText, afterText)` — テキストをカーソル位置で2つに分割し、後半を持つ新しい兄弟ノードを直後に挿入する(文字入力中のShift+Enter。ユーザーフィードバックにより追加)
 - `indent(nodeId)` / `outdent(nodeId)` — 階層変更(Tab / Shift+Tab)
 - `moveUp(nodeId)` / `moveDown(nodeId)` — 同階層内の並び替え(Ctrl+↑/↓)
 - `moveNode(nodeId, newParentId)` — 任意の別ノードの子として再親子付け(ドラッグ&ドロップ対応。実装時に追加。循環参照は例外で禁止)

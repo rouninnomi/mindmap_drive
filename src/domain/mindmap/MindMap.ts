@@ -73,6 +73,18 @@ export class MindMap {
     return node.id
   }
 
+  /**
+   * ノードのテキストをカーソル位置で2つに分割する(Shift+Enter)。対象ノードの
+   * テキストを`beforeText`に置き換え、`afterText`を持つ新しい兄弟ノードを直後に
+   * 挿入する。1回の操作としてUndo可能にするため、`MindMapEditingService`側では
+   * 1回の`mutate`呼び出しにまとめる。
+   */
+  splitNode(nodeId: NodeId, beforeText: NodeText, afterText: NodeText): NodeId {
+    const node = this.findNodeOrThrow(nodeId)
+    node.updateText(beforeText)
+    return this.addSiblingNode(nodeId, afterText)
+  }
+
   /** 選択ノードを直前の兄弟の子として1段深くする。直前の兄弟がなければ何もしない。 */
   indent(nodeId: NodeId): void {
     const parent = this.findParentOrThrow(nodeId)
@@ -137,6 +149,45 @@ export class MindMap {
     oldParent.removeChildAt(index)
     newParent.appendChild(node)
     this.touch()
+  }
+
+  /**
+   * 同じ親を持つ兄弟ノード2つ以上を1つに統合する(Ctrl+クリック/Shift+クリックでの
+   * 複数選択に対応。ユーザーフィードバックにより追加)。テキストは兄弟内の並び順で
+   * 改行連結し、子ノード・添付画像もすべて先頭(並び順で最初)のノードへ集約する。
+   * 統合後は先頭ノードの位置に残り、残りのノードは削除される。
+   * 異なる親を持つノード同士は統合できない(例外を投げる)。
+   */
+  mergeNodes(nodeIds: NodeId[]): NodeId {
+    if (nodeIds.length < 2) {
+      throw new Error('mergeNodes requires at least 2 nodes')
+    }
+    const parent = this.findParentOrThrow(nodeIds[0])
+    for (const id of nodeIds) {
+      if (this.findParentOrThrow(id) !== parent) {
+        throw new Error('mergeNodes only supports sibling nodes sharing the same parent')
+      }
+    }
+    const sortedIds = [...nodeIds].sort(
+      (a, b) => parent.indexOfChild(a) - parent.indexOfChild(b),
+    )
+    const nodes = sortedIds.map((id) => this.findNodeOrThrow(id))
+    const [first, ...rest] = nodes
+
+    first.updateText(NodeText.of(nodes.map((n) => n.text.value).join('\n')))
+    for (const node of rest) {
+      for (const child of node.children) {
+        first.appendChild(child)
+      }
+      for (const attachment of node.attachments) {
+        first.addAttachment(attachment)
+      }
+    }
+    for (const node of rest) {
+      parent.removeChildAt(parent.indexOfChild(node.id))
+    }
+    this.touch()
+    return first.id
   }
 
   /** ノードを削除する。子孫ノードもすべて削除される(カスケード削除)。 */

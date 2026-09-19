@@ -47,6 +47,9 @@ interface MapEditorPageProps {
  * - 選択中の`Enter`は(文字入力中と同じく)常に新規の兄弟ノードを追加し、即座にその
  *   文字入力モードに入る。既存ノードのテキストを後から編集したい場合はダブルクリックで
  *   文字入力モードに入る
+ * - 文字入力中の`Shift+Enter`は、カーソル位置でテキストを分割する(`MindMap.splitNode`)。
+ *   カーソルより前のテキストは現在のノードに残し、後ろのテキストを持つ新しい兄弟ノードを
+ *   直後に挿入して、即座にその文字入力モードに入る
  * - 文字入力中に`Esc`を押すと、ノードは選択されたまま文字入力モードのみを抜ける
  * - 子ノード追加は選択中・文字入力中どちらも`Tab`で直接作成する(表にある「インデント」
  *   動作としては実装せず、再親子付けはドラッグ&ドロップのみで行う。そのためアウトデント用の
@@ -76,6 +79,12 @@ interface MapEditorPageProps {
  *   自動保存(1.5秒デバウンス)やUndoスタックへの記録が一文字ごとに発生し、連続して
  *   文字を打っている最中に自動保存が頻繁に挟まってしまうため(ユーザーフィードバックに
  *   より変更)
+ * - `Ctrl+クリック`/`Shift+クリック`で同じ親を持つ兄弟ノードを複数選択できる
+ *   (`multiSelectedIds`。異なる親のノードは選択できない仕様とした。ユーザー
+ *   フィードバックにより追加)。複数選択中に`Enter`を押すと、選択したノードを兄弟内の
+ *   並び順で1つに統合する(`MindMap.mergeNodes`。テキストは改行連結、子・添付は
+ *   先頭ノードへ集約)。`Esc`で複数選択を解除する。複数選択中は他のショートカットは
+ *   何もしない(単一ノードに対する操作と意味が衝突するため)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -84,6 +93,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
+  const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set())
 
   const attachTargetRef = useRef<NodeId | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -176,7 +186,74 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const handleWrapperClick = useCallback((nodeId: NodeId) => {
     setEditingNodeId(null)
     setSelectedNodeId(nodeId.value)
+    setMultiSelectedIds(new Set())
   }, [])
+
+  // Ctrl+クリック: クリックしたノードの複数選択への追加/除外を切り替える。
+  // 直前の単一選択(selectedNodeId)も自動的に複数選択へ組み入れる。異なる親を持つ
+  // ノードを追加しようとした場合は、複数選択の仕様(兄弟のみ)に反するため
+  // そのノードだけの新しい選択としてやり直す。
+  const handleWrapperCtrlClick = useCallback(
+    (nodeId: NodeId) => {
+      setEditingNodeId(null)
+      const root = snapshot.map?.rootNode
+      const clickedParent = root?.findParentOf(nodeId) ?? null
+      setMultiSelectedIds((prev) => {
+        let base = prev
+        if (base.size === 0 && selectedNodeId && selectedNodeId !== nodeId.value && root) {
+          const anchorParent = root.findParentOf(NodeIdValueObject.of(selectedNodeId))
+          if (anchorParent && anchorParent === clickedParent) {
+            base = new Set([selectedNodeId])
+          }
+        }
+        if (base.size > 0 && root) {
+          const [existingId] = base
+          const existingParent = existingId ? root.findParentOf(NodeIdValueObject.of(existingId)) : null
+          if (existingParent && existingParent !== clickedParent) {
+            base = new Set()
+          }
+        }
+        const next = new Set(base)
+        if (next.has(nodeId.value)) {
+          next.delete(nodeId.value)
+        } else {
+          next.add(nodeId.value)
+        }
+        return next
+      })
+      setSelectedNodeId(nodeId.value)
+    },
+    [selectedNodeId, snapshot.map],
+  )
+
+  // Shift+クリック: 直前の単一選択(アンカー)からクリックしたノードまでの、
+  // 兄弟内での連続範囲を複数選択にする。親が異なる場合は通常のクリックとして扱う。
+  const handleWrapperShiftClick = useCallback(
+    (nodeId: NodeId) => {
+      setEditingNodeId(null)
+      const root = snapshot.map?.rootNode
+      const anchorId = selectedNodeId
+      if (!root || !anchorId) {
+        setSelectedNodeId(nodeId.value)
+        setMultiSelectedIds(new Set())
+        return
+      }
+      const anchorParent = root.findParentOf(NodeIdValueObject.of(anchorId))
+      const targetParent = root.findParentOf(nodeId)
+      if (!anchorParent || anchorParent !== targetParent) {
+        setSelectedNodeId(nodeId.value)
+        setMultiSelectedIds(new Set())
+        return
+      }
+      const anchorIndex = anchorParent.indexOfChild(NodeIdValueObject.of(anchorId))
+      const targetIndex = anchorParent.indexOfChild(nodeId)
+      const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
+      const range = anchorParent.children.slice(start, end + 1).map((n) => n.id.value)
+      setMultiSelectedIds(new Set(range))
+      setSelectedNodeId(nodeId.value)
+    },
+    [selectedNodeId, snapshot.map],
+  )
 
   // ↑↓での移動は同じ親を持つ兄弟間のみとする(親子間の移動は←→が担う)。
   const findSibling = useCallback(
@@ -201,6 +278,23 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   // ノードが「選択」状態(文字入力モードではない)の時のキー操作。
   const handleSelectedKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => {
+      // Ctrl+クリック/Shift+クリックで2つ以上選択中は、単一ノード向けの通常の
+      // ショートカットとは意味が衝突するため扱わない。Enterで統合、Escで選択解除のみ行う。
+      if (multiSelectedIds.size > 0) {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          const targetIds = Array.from(new Set([...multiSelectedIds, nodeId.value])).map((v) =>
+            NodeIdValueObject.of(v),
+          )
+          const mergedId = editor.mergeNodes(targetIds)
+          setMultiSelectedIds(new Set())
+          setSelectedNodeId(mergedId.value)
+        } else if (event.key === 'Escape') {
+          setMultiSelectedIds(new Set())
+        }
+        return
+      }
+
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
 
       if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
@@ -315,7 +409,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         }
       }
     },
-    [editor, flattened, snapshot.map, findSibling],
+    [editor, flattened, snapshot.map, findSibling, multiSelectedIds],
   )
 
   // ノードが「文字入力」状態の時のキー操作。
@@ -351,6 +445,16 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         attachTargetRef.current = nodeId
         fileInputRef.current?.click()
+        return
+      }
+      if (event.key === 'Enter' && event.shiftKey) {
+        event.preventDefault()
+        const cursor = event.currentTarget.selectionStart ?? currentText.length
+        const before = currentText.slice(0, cursor)
+        const after = currentText.slice(cursor)
+        const newId = editor.splitNode(nodeId, NodeText.of(before), NodeText.of(after))
+        setSelectedNodeId(newId.value)
+        setEditingNodeId(newId.value)
         return
       }
       if (event.key === 'Enter') {
@@ -464,8 +568,11 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     () => ({
       selectedNodeId,
       editingNodeId,
+      multiSelectedIds,
       commitText,
       handleWrapperClick,
+      handleWrapperCtrlClick,
+      handleWrapperShiftClick,
       handleWrapperDoubleClick,
       handleSelectedKeyDown,
       handleEditingKeyDown,
@@ -477,8 +584,11 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [
       selectedNodeId,
       editingNodeId,
+      multiSelectedIds,
       commitText,
       handleWrapperClick,
+      handleWrapperCtrlClick,
+      handleWrapperShiftClick,
       handleWrapperDoubleClick,
       handleSelectedKeyDown,
       handleEditingKeyDown,

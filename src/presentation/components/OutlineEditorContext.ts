@@ -4,8 +4,12 @@ import type { AttachmentId, NodeId } from '../../domain/mindmap/valueObjects'
 export interface OutlineEditorContextValue {
   selectedNodeId: string | null
   editingNodeId: string | null
+  /** Ctrl+クリック/Shift+クリックで追加された、マージ待ちの複数選択ノード群。 */
+  multiSelectedIds: ReadonlySet<string>
   commitText: (nodeId: NodeId, text: string) => void
   handleWrapperClick: (nodeId: NodeId) => void
+  handleWrapperCtrlClick: (nodeId: NodeId) => void
+  handleWrapperShiftClick: (nodeId: NodeId) => void
   handleWrapperDoubleClick: (nodeId: NodeId) => void
   handleSelectedKeyDown: (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => void
   handleEditingKeyDown: (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => void

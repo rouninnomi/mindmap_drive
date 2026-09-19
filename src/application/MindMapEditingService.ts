@@ -71,6 +71,10 @@ export class MindMapEditingService {
     return this.mutate((map) => map.addChildNode(parentNodeId, text))
   }
 
+  splitNode(nodeId: NodeId, beforeText: NodeText, afterText: NodeText): NodeId {
+    return this.mutate((map) => map.splitNode(nodeId, beforeText, afterText))
+  }
+
   indent(nodeId: NodeId): void {
     this.mutate((map) => map.indent(nodeId))
   }
@@ -89,6 +93,10 @@ export class MindMapEditingService {
 
   deleteNode(nodeId: NodeId): void {
     this.mutate((map) => map.deleteNode(nodeId))
+  }
+
+  mergeNodes(nodeIds: NodeId[]): NodeId {
+    return this.mutate((map) => map.mergeNodes(nodeIds))
   }
 
   moveNode(nodeId: NodeId, newParentId: NodeId): void {

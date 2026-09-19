@@ -46,6 +46,11 @@ function isTextCommitTriggerKey(event: { key: string; ctrlKey: boolean; metaKey:
  * 画像添付は`Ctrl+I`・ファイルのドラッグ&ドロップに加え、`Ctrl+V`でのクリップボード画像
  * 貼り付けにも対応する(選択中・文字入力中どちらでも動作するよう、ラッパーと`<input>`
  * 両方に同じ`onPaste`ハンドラを付けている)。
+ *
+ * `Ctrl+クリック`/`Shift+クリック`で同じ親を持つ兄弟ノードを複数選択でき
+ * (`multiSelectedIds`。`isSelected`にも反映される)、選択中の`Enter`でそれらを
+ * 1つに統合(マージ)する(詳細は`MapEditorPage.tsx`冒頭コメントと
+ * `MindMap.mergeNodes`参照)。
  */
 export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
   const node = data.node
@@ -53,8 +58,11 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
   const {
     selectedNodeId,
     editingNodeId,
+    multiSelectedIds,
     commitText,
     handleWrapperClick,
+    handleWrapperCtrlClick,
+    handleWrapperShiftClick,
     handleWrapperDoubleClick,
     handleSelectedKeyDown,
     handleEditingKeyDown,
@@ -64,7 +72,8 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
     handleDropImage,
   } = useOutlineEditorContext()
 
-  const isSelected = selectedNodeId === node.id.value
+  const isMultiSelected = multiSelectedIds.has(node.id.value)
+  const isSelected = selectedNodeId === node.id.value || isMultiSelected
   const isEditing = editingNodeId === node.id.value
 
   const [localText, setLocalText] = useState(node.text.value)
@@ -210,6 +219,14 @@ export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
     }
     const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y)
     if (distance > CLICK_MOVE_THRESHOLD_PX) {
+      return
+    }
+    if (event.ctrlKey || event.metaKey) {
+      handleWrapperCtrlClick(node.id)
+      return
+    }
+    if (event.shiftKey) {
+      handleWrapperShiftClick(node.id)
       return
     }
     const now = Date.now()
