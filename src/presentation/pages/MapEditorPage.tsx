@@ -18,6 +18,7 @@ import {
   MIND_MAP_NODE_TYPE,
   type MindMapFlowNode,
 } from '../canvasLayout'
+import type { Node as DomainNode } from '../../domain/mindmap/Node'
 import { MindMapCanvasNode } from '../components/MindMapCanvasNode'
 import { OutlineEditorContext, type OutlineEditorContextValue } from '../components/OutlineEditorContext'
 import { Toolbar } from '../components/Toolbar'
@@ -57,7 +58,9 @@ interface MapEditorPageProps {
  *   (文字入力中はテキストカーソルの単語移動という標準動作と衝突するため割り当てない)
  * - 画像添付は選択中・文字入力中どちらでも`Ctrl+I`。ノードへ画像ファイルを直接
  *   ドラッグ&ドロップして添付することもできる
- * - ノード間移動の↑↓: 選択中・文字入力中どちらもDFS順で前後のノードへ移動する
+ * - ノード間移動の↑↓: 選択中・文字入力中どちらも同じ親を持つ前後の兄弟ノードへ移動する
+ *   (子孫へは移動しない。DFS順だと子ノードへ入り込んでしまい直感に反するため、
+ *   ユーザーフィードバックにより兄弟間のみに変更した)
  * - ノード間移動の←→: 選択中のみ、←で親ノードへ、→で最初の子ノードへ移動する
  *   (折りたたまれている場合や子が無い場合、→は何もしない)。文字入力中は標準の
  *   テキストカーソル移動を優先し、ノード間移動には割り当てない
@@ -169,6 +172,19 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     setSelectedNodeId(nodeId.value)
   }, [])
 
+  // ↑↓での移動は同じ親を持つ兄弟間のみとする(親子間の移動は←→が担う)。
+  const findSibling = useCallback(
+    (nodeId: NodeId, offset: number): DomainNode | null => {
+      const parent = snapshot.map?.rootNode.findParentOf(nodeId)
+      if (!parent) {
+        return null
+      }
+      const index = parent.indexOfChild(nodeId)
+      return parent.children[index + offset] ?? null
+    },
+    [snapshot.map],
+  )
+
   // 選択中のEnterは常に新規の兄弟ノードを作るため、既存ノードのテキストを
   // 後から編集したい場合はダブルクリックで文字入力モードに入る。
   const handleWrapperDoubleClick = useCallback((nodeId: NodeId) => {
@@ -257,8 +273,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        const index = flattened.findIndex((n) => n.id.equals(nodeId))
-        const prev = flattened[index - 1]
+        const prev = findSibling(nodeId, -1)
         if (prev) {
           setSelectedNodeId(prev.id.value)
         }
@@ -266,8 +281,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        const index = flattened.findIndex((n) => n.id.equals(nodeId))
-        const next = flattened[index + 1]
+        const next = findSibling(nodeId, 1)
         if (next) {
           setSelectedNodeId(next.id.value)
         }
@@ -291,7 +305,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         }
       }
     },
-    [editor, flattened, snapshot.map],
+    [editor, flattened, snapshot.map, findSibling],
   )
 
   // ノードが「文字入力」状態の時のキー操作。
@@ -357,8 +371,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        const index = flattened.findIndex((n) => n.id.equals(nodeId))
-        const prev = flattened[index - 1]
+        const prev = findSibling(nodeId, -1)
         if (prev) {
           setSelectedNodeId(prev.id.value)
           setEditingNodeId(prev.id.value)
@@ -367,8 +380,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        const index = flattened.findIndex((n) => n.id.equals(nodeId))
-        const next = flattened[index + 1]
+        const next = findSibling(nodeId, 1)
         if (next) {
           setSelectedNodeId(next.id.value)
           setEditingNodeId(next.id.value)
@@ -380,7 +392,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         setEditingNodeId(null)
       }
     },
-    [editor, flattened],
+    [editor, flattened, findSibling],
   )
 
   const handleNodeDragStart = useCallback<OnNodeDrag<MindMapFlowNode>>(() => {
