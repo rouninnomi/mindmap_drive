@@ -156,6 +156,20 @@ describe('MindMap', () => {
     expect(map.rootNode.findById(a)?.collapsed).toBe(true)
   })
 
+  it('折りたたんだノードを展開すると、直下の子ノードまでの表示に留める(孫は畳まれたまま)', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addChildNode(a, NodeText.of('B'))
+    map.addChildNode(b, NodeText.of('C'))
+
+    // 展開したまま畳んで、また展開する
+    map.toggleCollapse(a)
+    map.toggleCollapse(a)
+
+    expect(map.rootNode.findById(a)?.collapsed).toBe(false)
+    expect(map.rootNode.findById(b)?.collapsed).toBe(true)
+  })
+
   it('updateTextでテキストを更新できる(空文字も許容)', () => {
     const map = newMap()
     const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))

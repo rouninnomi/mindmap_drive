@@ -100,7 +100,7 @@ MindMap集約が常に保証すべきルール:
 - `moveUp(nodeId)` / `moveDown(nodeId)` — 同階層内の並び替え(Ctrl+↑/↓)
 - `moveNode(nodeId, newParentId)` — 任意の別ノードの子として再親子付け(ドラッグ&ドロップ対応。実装時に追加。循環参照は例外で禁止)
 - `deleteNode(nodeId)` — カスケード削除
-- `toggleCollapse(nodeId)` — 折りたたみ/展開
+- `toggleCollapse(nodeId)` — 折りたたみ/展開。展開する際は、マップが巨大化した際に孫以降が一気に再展開されて見づらくならないよう、直下の子ノードまでの表示に留める(直接の子を強制的に折りたたみ状態にする。ユーザーフィードバックにより追加)
 - `updateText(nodeId, text)` — テキスト編集
 - `attachImage(nodeId, attachment)` / `removeAttachment(nodeId, attachmentId)` — 画像添付の追加・削除
 - `rename(newName)` — マップ名変更

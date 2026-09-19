@@ -1,6 +1,6 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
-import { CANVAS_NODE_WIDTH, type MindMapFlowNode } from '../canvasLayout'
+import { CANVAS_NODE_HEIGHT, CANVAS_NODE_WIDTH, type MindMapFlowNode } from '../canvasLayout'
 import { AttachmentViewer } from './AttachmentViewer'
 import { useOutlineEditorContext } from './OutlineEditorContext'
 
@@ -18,6 +18,8 @@ const DOUBLE_CLICK_MS = 400
  * 新規作成ノードは、React Flowが寸法計測を終えるまでの数フレーム`visibility: hidden`で
  * 描画されるため、そのまま`focus()`すると失敗する。見えるようになるまで
  * `requestAnimationFrame`で再試行してからフォーカスする(この effect のコメント参照)。
+ * 選択(selected)・文字入力(editing)いずれかの状態になるたびに、
+ * `useReactFlow().setCenter`でそのノードを画面中央へパンする(ズーム倍率は変更しない)。
  *
  * ドラッグ操作(再親子付け)とテキスト入力・ボタン操作が競合しないよう、入力欄と
  * ボタンにはReact Flowの規約に従い`nodrag`クラスを付与している(外枠の`.mindmap-node`
@@ -26,8 +28,9 @@ const DOUBLE_CLICK_MS = 400
  * React Flow自身のドラッグ判定によって発火しないことがあるため、選択操作は
  * `onClick`ではなくpointerdown/upの移動量で自前判定している(下記ハンドラのコメント参照)。
  */
-export function MindMapCanvasNode({ data }: NodeProps<MindMapFlowNode>) {
+export function MindMapCanvasNode({ id, data }: NodeProps<MindMapFlowNode>) {
   const node = data.node
+  const { setCenter, getZoom, getNode } = useReactFlow()
   const {
     selectedNodeId,
     editingNodeId,
@@ -98,6 +101,22 @@ export function MindMapCanvasNode({ data }: NodeProps<MindMapFlowNode>) {
       }
     }
   }, [isEditing, isSelected])
+
+  // 選択(selected)・文字入力(editing)いずれかの状態になったノードが画面外や
+  // 端の方にあると見づらいため、ズームは変えずに画面中央へパンする。
+  useEffect(() => {
+    if (!isEditing && !isSelected) {
+      return
+    }
+    const flowNode = getNode(id)
+    if (!flowNode) {
+      return
+    }
+    setCenter(flowNode.position.x + CANVAS_NODE_WIDTH / 2, flowNode.position.y + CANVAS_NODE_HEIGHT / 2, {
+      zoom: getZoom(),
+      duration: 300,
+    })
+  }, [isEditing, isSelected, id, getNode, setCenter, getZoom])
 
   const commitIfChanged = (): void => {
     if (localText !== node.text.value) {

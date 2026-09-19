@@ -60,8 +60,19 @@ export class Node {
     this._text = text
   }
 
+  /**
+   * 折りたたみ状態を反転する。展開する(collapsed: true→false)場合は、
+   * マップが巨大化した際に孫以降が一気に再展開されて見づらくならないよう、
+   * 直下の子ノードまでの表示に留める(直接の子を強制的に折りたたみ状態にする)。
+   */
   toggleCollapse(): void {
+    const wasCollapsed = this._collapsed
     this._collapsed = !this._collapsed
+    if (wasCollapsed) {
+      for (const child of this._children) {
+        child._collapsed = true
+      }
+    }
   }
 
   addAttachment(attachment: Attachment): void {
