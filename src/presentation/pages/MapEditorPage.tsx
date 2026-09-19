@@ -85,6 +85,11 @@ interface MapEditorPageProps {
  *   並び順で1つに統合する(`MindMap.mergeNodes`。テキストは改行連結、子・添付は
  *   先頭ノードへ集約)。`Esc`で複数選択を解除する。複数選択中は他のショートカットは
  *   何もしない(単一ノードに対する操作と意味が衝突するため)
+ * - `Ctrl+Shift+9`でマップ内の全ノードを展開、`Ctrl+Shift+0`で全折りたたみする
+ *   (`MindMap.expandAll`/`collapseAll`。全展開はブラウザの検索(Ctrl+F)で全文検索
+ *   できるようにする用途を想定。特定ノードの操作ではないためwindowレベルで拾う。
+ *   `Ctrl+9`/`Ctrl+0`はブラウザ標準の予約済みショートカット(タブ切り替え/ズーム
+ *   リセット)と衝突するため採用しなかった。ユーザーフィードバックにより追加)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -136,6 +141,32 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       setEditingNodeId(newId.value)
     }
   }, [snapshot.map, editor])
+
+  // 全展開/全折りたたみは特定のノードに対する操作ではないため、個々のノードの
+  // フォーカスに依存せず常に効くようwindowレベルで拾う。`Ctrl+9`/`Ctrl+0`はそれぞれ
+  // ブラウザ標準の「一番右のタブへ切り替え」「ズームを100%にリセット」という予約済み
+  // ショートカットと衝突しページ側から止められないため、`Ctrl+Shift+9`/`Ctrl+Shift+0`
+  // を採用した(ユーザーフィードバックにより追加)。Shift併用時は`event.key`がシフト後の
+  // 記号(例: `(`)になり得るため、レイアウトに依存しない`event.code`で判定する。
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: globalThis.KeyboardEvent): void => {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey
+      if (!isCtrlOrCmd || !event.shiftKey) {
+        return
+      }
+      if (event.code === 'Digit9') {
+        event.preventDefault()
+        editor.expandAll()
+      } else if (event.code === 'Digit0') {
+        event.preventDefault()
+        editor.collapseAll()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown)
+    }
+  }, [editor])
 
   const commitText = useCallback(
     (nodeId: NodeId, text: string) => {

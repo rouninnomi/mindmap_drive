@@ -208,6 +208,25 @@ describe('MindMap', () => {
     expect(map.rootNode.findById(b)?.collapsed).toBe(true)
   })
 
+  it('expandAll/collapseAllでマップ内の全ノードを一括展開/折りたたみできる', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addChildNode(a, NodeText.of('B'))
+    const c = map.addChildNode(b, NodeText.of('C'))
+    map.toggleCollapse(a)
+    map.toggleCollapse(b)
+
+    map.collapseAll()
+    expect(map.rootNode.findById(a)?.collapsed).toBe(true)
+    expect(map.rootNode.findById(b)?.collapsed).toBe(true)
+    expect(map.rootNode.findById(c)?.collapsed).toBe(true)
+
+    map.expandAll()
+    expect(map.rootNode.findById(a)?.collapsed).toBe(false)
+    expect(map.rootNode.findById(b)?.collapsed).toBe(false)
+    expect(map.rootNode.findById(c)?.collapsed).toBe(false)
+  })
+
   it('updateTextでテキストを更新できる(空文字も許容)', () => {
     const map = newMap()
     const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))

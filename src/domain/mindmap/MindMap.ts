@@ -203,6 +203,28 @@ export class MindMap {
     this.touch()
   }
 
+  /**
+   * マップ内の全ノードを展開する(ブラウザの検索(Ctrl+F)で全文検索できるようにする
+   * 用途を想定。ユーザーフィードバックにより追加)。
+   */
+  expandAll(): void {
+    this.setCollapsedRecursively(this.root, false)
+    this.touch()
+  }
+
+  /** マップ内の全ノードを折りたたむ。 */
+  collapseAll(): void {
+    this.setCollapsedRecursively(this.root, true)
+    this.touch()
+  }
+
+  private setCollapsedRecursively(node: Node, collapsed: boolean): void {
+    for (const child of node.children) {
+      child.setCollapsed(collapsed)
+      this.setCollapsedRecursively(child, collapsed)
+    }
+  }
+
   updateText(nodeId: NodeId, text: NodeText): void {
     this.findNodeOrThrow(nodeId).updateText(text)
     this.touch()

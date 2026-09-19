@@ -75,6 +75,11 @@ export class Node {
     }
   }
 
+  /** 折りたたみ状態を直接指定する(全展開/全折りたたみ用。`toggleCollapse`と異なり反転ではない)。 */
+  setCollapsed(collapsed: boolean): void {
+    this._collapsed = collapsed
+  }
+
   addAttachment(attachment: Attachment): void {
     this._attachments = [...this._attachments, attachment]
   }
