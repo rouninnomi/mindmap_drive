@@ -191,6 +191,25 @@
   padding: 6px 8px;
   box-shadow: var(--shadow);
   text-align: left;
+  outline: none;
+}
+
+.mindmap-node.is-selected {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-border);
+}
+
+.mindmap-node.is-drag-over {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+/* 親子関係の線を引くための接続点(React Flowの規約上必要)だが、手動で線を
+   つなぐ操作には使わせない(`nodesConnectable={false}`)。見た目上も操作可能に
+   見えないよう非表示にする。 */
+.mindmap-node .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .mindmap-node-row {
@@ -218,18 +237,30 @@
   }
 }
 
+.mindmap-node-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-h);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .collapse-toggle {
   flex: 0 0 auto;
-  width: 22px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--text-h);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 20px;
 }
 
 .outline-input {

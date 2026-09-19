@@ -48,9 +48,14 @@ src/
 - **現在: `docs/task.md` の実装タスクはコード側で対応可能な範囲がすべて完了(5節「仕上げ」含む)。残るのはユーザー側の手動作業のみ**
   - 表示方式変更の詳細は`docs/requirements.md` 3節・4.3節末尾の注記、`docs/architecture.md` 3.5節、`docs/task.md` 4.5節を参照。`@xyflow/react`(React Flow)+`d3-hierarchy`で自動レイアウトのキャンバスを構築し、ドラッグ&ドロップでの再親子付け(`MindMap.moveNode`をドメイン層に新規追加)に対応した。ドメイン層の親子ツリー構造自体は変更していない
   - プレゼンテーション層(`src/presentation/`): `useMindMapCatalog`/`useMindMapEditor`フック、`LoginButton`、`MapListPage`、`MapEditorPage`(React Flowキャンバス)/`MindMapCanvasNode`、`AttachmentViewer`、`Toolbar`、`canvasLayout.ts`を実装
-  - キーボードショートカットは要件定義4.3節の表を一部実装時に調整(`Tab`はインデント動作、折りたたみは`Ctrl+/`、画像添付は`Ctrl+I`など。詳細は`docs/requirements.md` 4.3節の注記と`MapEditorPage.tsx`冒頭コメント参照)
+  - キーボードショートカットは要件定義4.3節の表を実装時・ユーザーフィードバックにより調整(詳細は`docs/requirements.md` 4.3節の注記と`MapEditorPage.tsx`冒頭コメント参照)。当初の「常に`<input>`で編集」方式から、ユーザーからの追加フィードバックにより「選択(selected)」と「文字入力(editing)」の2モードへ変更した:
+    - クリックで選択(地の文表示)。選択中・文字入力中どちらも`Enter`で兄弟ノード追加、`Tab`で子ノード追加。既存ノードのテキスト編集はダブルクリック、`Esc`で選択状態のまま文字入力のみ抜ける
+    - `Backspace`/`Delete`は選択中はテキスト有無によらず即削除。折りたたみ/展開は選択中のみ`Ctrl+←`/`Ctrl+→`。画像添付は`Ctrl+I`に加えてノードへのファイルの直接ドラッグ&ドロップにも対応
+    - ノード間移動は`↑`/`↓`がDFS順、`←`/`→`(選択中のみ)が親/最初の子ノードへの移動
+    - ノード本体のドラッグ範囲をテキストラベル部分まで拡大した際、React Flow自身のドラッグ判定でネイティブ`click`イベントが発火しないことがある不具合を発見し、pointerdown/upの移動量で自前判定する方式に変更して解消
+    - 折りたたみ/展開マーカー(▾/▸)は視認性向上のため拡大し、ノード右側に表示する配置に変更。React Flowの接続ハンドル(丸印)は`nodesConnectable={false}`で無効化しているにもかかわらず十字カーソルが出て紛らわしかったため非表示化した
   - claude-in-chromeスキルでの結合テストで、アウトライン表示時代に以下2件、キャンバス化の際にさらに複数件の不具合を発見・修正済み(詳細はセッション履歴参照。代表例: インデント/アウトデント直後にテキストが失われる不具合、Undo/Redo直後にフォーカスが失われる不具合、React Flowの`.react-flow`要素の高さが0になり描画されない不具合、ノードラッパーがクリックのフォーカスを奪う不具合)
-  - **既知の軽微な課題**: Enterキーでの新規ノード作成直後の自動フォーカスが、React Flow自身の内部再描画とのタイミング競合によりまれに効かないことがある(`docs/task.md` 4.5節参照)
+  - **既知の軽微な課題は解消済み**: 新規ノード作成直後の自動フォーカスがまれに効かない不具合は、React Flowが寸法計測を終えるまで新規ノードを`visibility: hidden`で描画することが原因と判明し、見えるようになるまで`requestAnimationFrame`で再試行する方式に修正して解消した(`docs/task.md` 4.5節の記載も解消済みとして更新要)
   - 単体テスト計40件、`npm run build`・`npm test`・`npm run lint`とも通過確認済み
   - **Google Cloud Console**: 専用プロジェクト`mindmap-drive`(プロジェクトID: `mindmap-drive-506913`)、OAuthクライアントID発行済み、`.env`設定済み。本番デプロイ先が決まったらそのオリジンを承認済みJavaScript生成元に追加要
   - 画像添付(`Ctrl+I`)はclaude-in-chromeのfile_uploadツールで確認済み(アップロード・保存・サムネイル表示・Undo/Redo・再読み込みでの復元すべて正常動作)

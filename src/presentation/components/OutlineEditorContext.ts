@@ -2,12 +2,17 @@ import { createContext, useContext, type KeyboardEvent } from 'react'
 import type { AttachmentId, NodeId } from '../../domain/mindmap/valueObjects'
 
 export interface OutlineEditorContextValue {
-  registerInput: (id: string, el: HTMLInputElement | null) => void
+  selectedNodeId: string | null
+  editingNodeId: string | null
   commitText: (nodeId: NodeId, text: string) => void
-  handleKeyDown: (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => void
+  handleWrapperClick: (nodeId: NodeId) => void
+  handleWrapperDoubleClick: (nodeId: NodeId) => void
+  handleSelectedKeyDown: (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => void
+  handleEditingKeyDown: (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => void
   handleToggleCollapse: (nodeId: NodeId) => void
   handleAttachClick: (nodeId: NodeId) => void
   handleRemoveAttachment: (nodeId: NodeId, attachmentId: AttachmentId) => void
+  handleDropImage: (nodeId: NodeId, file: File) => void
 }
 
 export const OutlineEditorContext = createContext<OutlineEditorContextValue | null>(null)

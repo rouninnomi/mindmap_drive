@@ -8,7 +8,7 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { AttachmentId, MapId, NodeId } from '../../domain/mindmap/valueObjects'
 import { MapName, NodeId as NodeIdValueObject, NodeText } from '../../domain/mindmap/valueObjects'
 import {
@@ -40,27 +40,36 @@ interface MapEditorPageProps {
  * ドロップ先が無ければ、レイアウトの再計算により元の位置へ自動的に戻る(座標を
  * 保存していないため、これは追加コード無しで自然に実現される)。
  *
- * 要件定義4.3節の表と異なる点(通常のテキスト入力と衝突するため実装時に調整した。
- * 詳細は`docs/requirements.md` 4.3節の注記を参照):
- * - 子ノード追加: 表では「Tab」だが、MindMup本来の挙動(ドラッグでの再親子付けと
- *   同様に「インデント」)として実装。新規の子ノードは「Enterで兄弟追加→Tabで
- *   インデント」、またはドラッグ&ドロップで作成する
- * - 折りたたみ/展開: 表では「/」または「F」だが、テキスト入力中に文字として
- *   衝突するため`Ctrl+/`に変更
- * - 画像添付: 表では「I」だが、同様の理由で`Ctrl+I`に変更
- * - ノード間移動の←→: テキストカーソルの左右移動という標準動作を優先し、
- *   ノード間移動には割り当てない(↑↓のみ、DFS順で前後のノードへ移動する)
- * - Esc(「ルートに戻る/表示リセット」): v1にズーム機能はないため、
- *   フォーカスを外す(blur)動作として扱う
+ * 「選択(selected)」と「文字入力(editing)」の2モードを持つ(ユーザーフィードバックにより
+ * 当初のアウトライン型から変更。詳細は`docs/requirements.md` 4.3節の注記を参照):
+ * - ノードをクリックすると選択状態になる(テキストは地の文表示のまま、`<input>`にはならない)
+ * - 選択中の`Enter`は(文字入力中と同じく)常に新規の兄弟ノードを追加し、即座にその
+ *   文字入力モードに入る。既存ノードのテキストを後から編集したい場合はダブルクリックで
+ *   文字入力モードに入る
+ * - 文字入力中に`Esc`を押すと、ノードは選択されたまま文字入力モードのみを抜ける
+ * - 子ノード追加は選択中・文字入力中どちらも`Tab`で直接作成する(表にある「インデント」
+ *   動作としては実装せず、再親子付けはドラッグ&ドロップのみで行う。そのためアウトデント用の
+ *   ショートカットは無い)。文字入力中の`Tab`は単語区切り等の標準動作は無いため、そのまま
+ *   子ノード作成に割り当てて問題ない
+ * - ノード削除(`Backspace`/`Delete`)は、選択中はテキストの有無によらず即削除。文字入力中は
+ *   従来通りテキストが空の時のみノード自体を削除する(それ以外は通常の文字削除)
+ * - 折りたたみ/展開は選択中のみ`Ctrl+←`(折りたたみ)/`Ctrl+→`(展開)に割り当てる
+ *   (文字入力中はテキストカーソルの単語移動という標準動作と衝突するため割り当てない)
+ * - 画像添付は選択中・文字入力中どちらでも`Ctrl+I`。ノードへ画像ファイルを直接
+ *   ドラッグ&ドロップして添付することもできる
+ * - ノード間移動の↑↓: 選択中・文字入力中どちらもDFS順で前後のノードへ移動する
+ * - ノード間移動の←→: 選択中のみ、←で親ノードへ、→で最初の子ノードへ移動する
+ *   (折りたたまれている場合や子が無い場合、→は何もしない)。文字入力中は標準の
+ *   テキストカーソル移動を優先し、ノード間移動には割り当てない
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<MindMapFlowNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
 
-  const inputsRef = useRef(new Map<string, HTMLInputElement>())
-  const pendingFocusRef = useRef<string | null>(null)
   const attachTargetRef = useRef<NodeId | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const isDraggingRef = useRef(false)
@@ -93,41 +102,15 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
 
   // マップ読み込み直後、トップレベルノードが1つもなければ最初の空ノードを用意する
   // (「思考のスピードを止めない」ため、すぐ入力を始められるようにする)。
+  // 対象ノードのDOM(input)がまだ存在しなくても、selectedNodeId/editingNodeIdへの反映だけで
+  // よい(実際のフォーカス移動はMindMapCanvasNode自身のマウント時effectが行うため)。
   useEffect(() => {
     if (snapshot.map && snapshot.map.rootNode.children.length === 0) {
       const newId = editor.addChildNode(snapshot.map.rootNode.id, NodeText.empty())
-      pendingFocusRef.current = newId.value
+      setSelectedNodeId(newId.value)
+      setEditingNodeId(newId.value)
     }
   }, [snapshot.map, editor])
-
-  // レイアウト(nodes state)が実際に反映された後にフォーカスを復元する。
-  // snapshot.versionではなくnodesを依存にするのは、setNodesが新しい描画を
-  // スケジュールしてから実際にDOMへ反映されるまでに1レンダー分のずれがあるため。
-  //
-  // React Flow自身も内部の寸法計測(ResizeObserver)に伴い独自にnodesを
-  // 更新することがあり、対象ノードのinputがまだ登録される前にこの effect が
-  // 先に発火することがある。そのため、対象inputが見つかった時だけ
-  // pendingFocusRefを消費する(見つからなければ何もせず、次のnodes変化を待って
-  // 再試行する)。
-  useEffect(() => {
-    const id = pendingFocusRef.current
-    if (!id) {
-      return
-    }
-    const el = inputsRef.current.get(id)
-    if (el) {
-      pendingFocusRef.current = null
-      el.focus()
-    }
-  }, [nodes])
-
-  const registerInput = useCallback((id: string, el: HTMLInputElement | null) => {
-    if (el) {
-      inputsRef.current.set(id, el)
-    } else {
-      inputsRef.current.delete(id)
-    }
-  }, [])
 
   const commitText = useCallback(
     (nodeId: NodeId, text: string) => {
@@ -168,14 +151,35 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [editor],
   )
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => {
+  const handleDropImage = useCallback(
+    (nodeId: NodeId, file: File) => {
+      void editor.attachImage(nodeId, file)
+    },
+    [editor],
+  )
+
+  const handleWrapperClick = useCallback((nodeId: NodeId) => {
+    setEditingNodeId(null)
+    setSelectedNodeId(nodeId.value)
+  }, [])
+
+  // 選択中のEnterは常に新規の兄弟ノードを作るため、既存ノードのテキストを
+  // 後から編集したい場合はダブルクリックで文字入力モードに入る。
+  const handleWrapperDoubleClick = useCallback((nodeId: NodeId) => {
+    setSelectedNodeId(nodeId.value)
+    setEditingNodeId(nodeId.value)
+  }, [])
+
+  // ノードが「選択」状態(文字入力モードではない)の時のキー操作。
+  const handleSelectedKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
 
       if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        pendingFocusRef.current = nodeId.value
         editor.undo()
+        setEditingNodeId(null)
+        setSelectedNodeId(nodeId.value)
         return
       }
       if (
@@ -183,25 +187,37 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'))
       ) {
         event.preventDefault()
-        pendingFocusRef.current = nodeId.value
         editor.redo()
+        setEditingNodeId(null)
+        setSelectedNodeId(nodeId.value)
         return
       }
       if (isCtrlOrCmd && event.key === 'ArrowUp') {
         event.preventDefault()
         editor.moveUp(nodeId)
-        pendingFocusRef.current = nodeId.value
+        setSelectedNodeId(nodeId.value)
         return
       }
       if (isCtrlOrCmd && event.key === 'ArrowDown') {
         event.preventDefault()
         editor.moveDown(nodeId)
-        pendingFocusRef.current = nodeId.value
+        setSelectedNodeId(nodeId.value)
         return
       }
-      if (isCtrlOrCmd && event.key === '/') {
+      if (isCtrlOrCmd && event.key === 'ArrowLeft') {
         event.preventDefault()
-        editor.toggleCollapse(nodeId)
+        const node = flattened.find((n) => n.id.equals(nodeId))
+        if (node && node.children.length > 0 && !node.collapsed) {
+          editor.toggleCollapse(nodeId)
+        }
+        return
+      }
+      if (isCtrlOrCmd && event.key === 'ArrowRight') {
+        event.preventDefault()
+        const node = flattened.find((n) => n.id.equals(nodeId))
+        if (node && node.children.length > 0 && node.collapsed) {
+          editor.toggleCollapse(nodeId)
+        }
         return
       }
       if (isCtrlOrCmd && event.key.toLowerCase() === 'i') {
@@ -213,17 +229,105 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       if (event.key === 'Enter') {
         event.preventDefault()
         const newId = editor.addSiblingNode(nodeId, NodeText.empty())
-        pendingFocusRef.current = newId.value
+        setSelectedNodeId(newId.value)
+        setEditingNodeId(newId.value)
         return
       }
       if (event.key === 'Tab') {
         event.preventDefault()
-        if (event.shiftKey) {
-          editor.outdent(nodeId)
-        } else {
-          editor.indent(nodeId)
+        const newId = editor.addChildNode(nodeId, NodeText.empty())
+        setSelectedNodeId(newId.value)
+        setEditingNodeId(newId.value)
+        return
+      }
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        event.preventDefault()
+        const index = flattened.findIndex((n) => n.id.equals(nodeId))
+        const fallback = flattened[index - 1] ?? flattened[index + 1] ?? null
+        editor.deleteNode(nodeId)
+        setEditingNodeId(null)
+        setSelectedNodeId(fallback ? fallback.id.value : null)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        const index = flattened.findIndex((n) => n.id.equals(nodeId))
+        const prev = flattened[index - 1]
+        if (prev) {
+          setSelectedNodeId(prev.id.value)
         }
-        pendingFocusRef.current = nodeId.value
+        return
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        const index = flattened.findIndex((n) => n.id.equals(nodeId))
+        const next = flattened[index + 1]
+        if (next) {
+          setSelectedNodeId(next.id.value)
+        }
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        const root = snapshot.map?.rootNode
+        const parent = root?.findParentOf(nodeId)
+        if (parent && root && !parent.id.equals(root.id)) {
+          setSelectedNodeId(parent.id.value)
+        }
+        return
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        const node = flattened.find((n) => n.id.equals(nodeId))
+        const firstChild = node?.children[0]
+        if (node && !node.collapsed && firstChild) {
+          setSelectedNodeId(firstChild.id.value)
+        }
+      }
+    },
+    [editor, flattened, snapshot.map],
+  )
+
+  // ノードが「文字入力」状態の時のキー操作。
+  const handleEditingKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>, nodeId: NodeId, currentText: string) => {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey
+
+      if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        editor.undo()
+        setEditingNodeId(null)
+        setSelectedNodeId(nodeId.value)
+        return
+      }
+      if (
+        isCtrlOrCmd &&
+        (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'))
+      ) {
+        event.preventDefault()
+        editor.redo()
+        setEditingNodeId(null)
+        setSelectedNodeId(nodeId.value)
+        return
+      }
+      if (isCtrlOrCmd && event.key.toLowerCase() === 'i') {
+        event.preventDefault()
+        attachTargetRef.current = nodeId
+        fileInputRef.current?.click()
+        return
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        const newId = editor.addSiblingNode(nodeId, NodeText.empty())
+        setSelectedNodeId(newId.value)
+        setEditingNodeId(newId.value)
+        return
+      }
+      if (event.key === 'Tab') {
+        event.preventDefault()
+        const newId = editor.addChildNode(nodeId, NodeText.empty())
+        setSelectedNodeId(newId.value)
+        setEditingNodeId(newId.value)
         return
       }
       if (event.key === 'Backspace' || event.key === 'Delete') {
@@ -234,7 +338,8 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         const index = flattened.findIndex((n) => n.id.equals(nodeId))
         const fallback = flattened[index - 1] ?? flattened[index + 1] ?? null
         editor.deleteNode(nodeId)
-        pendingFocusRef.current = fallback ? fallback.id.value : null
+        setEditingNodeId(null)
+        setSelectedNodeId(fallback ? fallback.id.value : null)
         return
       }
       if (event.key === 'ArrowUp') {
@@ -242,7 +347,8 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         const index = flattened.findIndex((n) => n.id.equals(nodeId))
         const prev = flattened[index - 1]
         if (prev) {
-          inputsRef.current.get(prev.id.value)?.focus()
+          setSelectedNodeId(prev.id.value)
+          setEditingNodeId(prev.id.value)
         }
         return
       }
@@ -251,12 +357,14 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         const index = flattened.findIndex((n) => n.id.equals(nodeId))
         const next = flattened[index + 1]
         if (next) {
-          inputsRef.current.get(next.id.value)?.focus()
+          setSelectedNodeId(next.id.value)
+          setEditingNodeId(next.id.value)
         }
         return
       }
       if (event.key === 'Escape') {
-        event.currentTarget.blur()
+        event.preventDefault()
+        setEditingNodeId(null)
       }
     },
     [editor, flattened],
@@ -315,14 +423,31 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
 
   const contextValue: OutlineEditorContextValue = useMemo(
     () => ({
-      registerInput,
+      selectedNodeId,
+      editingNodeId,
       commitText,
-      handleKeyDown,
+      handleWrapperClick,
+      handleWrapperDoubleClick,
+      handleSelectedKeyDown,
+      handleEditingKeyDown,
       handleToggleCollapse,
       handleAttachClick,
       handleRemoveAttachment,
+      handleDropImage,
     }),
-    [registerInput, commitText, handleKeyDown, handleToggleCollapse, handleAttachClick, handleRemoveAttachment],
+    [
+      selectedNodeId,
+      editingNodeId,
+      commitText,
+      handleWrapperClick,
+      handleWrapperDoubleClick,
+      handleSelectedKeyDown,
+      handleEditingKeyDown,
+      handleToggleCollapse,
+      handleAttachClick,
+      handleRemoveAttachment,
+      handleDropImage,
+    ],
   )
 
   if (!snapshot.map) {
