@@ -91,14 +91,20 @@ src/
 
 プロジェクト全体の方針・現在のフェーズ状況は [`CLAUDE.md`](./CLAUDE.md) にまとめている。
 
-## デプロイ(GitHub Pages)
+## デプロイ(Cloudflare Pages)
 
-`master`ブランチへのpushをトリガーに、GitHub Actions(`.github/workflows/deploy.yml`)がビルドしてGitHub Pagesへ自動デプロイする。
+GitHubリポジトリ(`rouninnomi/mindmap_drive`)と連携したCloudflare Pagesが、`master`ブランチへのpushをトリガーに自動でビルド・デプロイする。
 
-- 公開URL: <https://rouninnomi.github.io/mindmap_drive/>
-- リポジトリはPublic(GitHub Pagesを無料で使うため)。マインドマップのデータ自体は各自のGoogle Driveに保存されるため、ソースコード・設計ドキュメントが公開されるのみで、マップの内容が公開されることはない
-- ビルド時の環境変数 `VITE_GOOGLE_CLIENT_ID` はリポジトリシークレット(Settings → Secrets and variables → Actions)から注入する
-- プロジェクトページ配信(`https://<user>.github.io/<repo>/`)のため、`vite.config.ts`で`GITHUB_PAGES`環境変数が立っている時だけ`base: '/mindmap_drive/'`を設定している(ローカル開発・プレビューには影響しない)
-- Google Cloud ConsoleのOAuthクライアントIDの「承認済みのJavaScript生成元」に `https://rouninnomi.github.io` を登録済み(`http://localhost:5173`と並べて設定)
+- 公開URL: <https://mindmap-drive.pages.dev>
+- ビルドコマンド: `npm run build` / ビルド出力ディレクトリ: `dist`(Cloudflare Pagesプロジェクトの設定画面で指定)
+- ビルド時の環境変数 `VITE_GOOGLE_CLIENT_ID` はCloudflare Pagesプロジェクトの「Settings → Variables and secrets」で設定する
+- `public/_headers` で `Cross-Origin-Opener-Policy: same-origin-allow-popups` を全パスに設定している(後述の理由により必須)
+- Google Cloud ConsoleのOAuthクライアントIDの「承認済みのJavaScript生成元」に `https://mindmap-drive.pages.dev` を登録済み(`http://localhost:5173`と並べて設定)
 
-初回セットアップ(実施済み): `gh` CLIでリポジトリのPublic化・リポジトリシークレット`VITE_GOOGLE_CLIENT_ID`の登録・GitHub Pagesの有効化(ソース: GitHub Actions)、Google Cloud Consoleでの承認済みJavaScript生成元の追加。同種のアプリを新たにデプロイする場合はこの4点を先に行うこと。
+### GitHub Pagesを使わない理由
+
+当初はGitHub Pagesにデプロイしていたが、GoogleのログインポップアップがGitHub Pages上で完了しても`GoogleAuthRequiredError`(`Google sign-in is required`)になり、常にログインに失敗する不具合が発覚した。原因はGoogle Identity Servicesのポップアップ完了検知が`Cross-Origin-Opener-Policy: same-origin-allow-popups`ヘッダーの送信を要求するのに対し、GitHub Pagesが静的ホスティングでカスタムHTTPレスポンスヘッダーを一切設定できないこと(`_headers`ファイル相当の仕組みがない)。ローカル開発サーバー(`http://localhost:5173`)ではこの制限を受けず問題なくログインできていたため、発覚が遅れた。
+
+この制限を回避するため、カスタムヘッダー(`public/_headers`)に対応したCloudflare Pagesへ移行した。`.github/workflows/deploy.yml`によるGitHub Pagesへの自動デプロイは廃止済み。同種の問題を踏むアプリでは、静的ホスティング選定時にカスタムレスポンスヘッダーの可否を確認すること。
+
+初回セットアップ(実施済み): Cloudflare Pagesプロジェクトの作成・GitHub連携・ビルド設定(`npm run build` / `dist`)・環境変数`VITE_GOOGLE_CLIENT_ID`の登録、Google Cloud Consoleでの承認済みJavaScript生成元への新URL追加。同種のアプリを新たにデプロイする場合はこの手順を踏むこと。

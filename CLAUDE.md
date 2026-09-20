@@ -71,6 +71,12 @@ src/
   - 画像添付に`Ctrl+V`でのクリップボード貼り付けを追加。添付画像を持つノードによるキャンバス上の重なりをレイアウトの`separation`調整で解消。画像保存先を`MindMapDrive`直下から`images/<mapId>/`のマップごとのサブフォルダへ整理(フォルダ作成の競合バグも修正)
   - Googleアクセストークンを`sessionStorage`に保持し、同一タブでの再読み込みでは再ログイン不要に(無言の再認可はポップアップ方式でユーザー操作を伴わない場面ではほぼ確実に失敗するため)
   - 一度折りたたんだノードを再展開すると直下の子までの表示に留める(孫以降は畳んだまま)よう`toggleCollapse`を変更(巨大化したマップで孫以降が一気に再展開されるのを防ぐ)
+- **ホスティングをGitHub PagesからCloudflare Pagesへ移行(2026-09-20)**
+  - 症状: GitHub Pages公開後、Googleログインのポップアップで同意画面まで正常に進み閉じるにもかかわらず、常に`GoogleAuthRequiredError`(「Google sign-in is required」)でログイン失敗。ローカル開発サーバー(`http://localhost:5173`)では同じ操作で問題なくログインできていた
+  - 原因: Google Identity Servicesのポップアップ完了検知(コンソールに`Cross-Origin-Opener-Policy policy would block the window.closed call`と出る)が、呼び出し元ページ自身が`Cross-Origin-Opener-Policy: same-origin-allow-popups`ヘッダーを送信することを事実上要求する。GitHub Pagesは静的ホスティングでカスタムHTTPレスポンスヘッダーを設定する手段がなく(`_headers`相当の仕組みがない)、このヘッダーを付与できなかったことが直接原因。ポップアップブロック・拡張機能・サードパーティCookie設定・ブラウザ種別(Chrome/Edge)・Google Cloud Console側の設定(テストユーザー・承認済みオリジン)はすべて切り分けの結果シロだった
+  - 対応: `public/_headers`に`Cross-Origin-Opener-Policy: same-origin-allow-popups`を追加し、これに対応するCloudflare Pages(公開URL: `https://mindmap-drive.pages.dev`)へ移行。GitHubリポジトリ連携で`master`push時に自動ビルド(`npm run build` / 出力`dist`)・デプロイ。環境変数`VITE_GOOGLE_CLIENT_ID`はCloudflare Pages側の「Variables and secrets」に設定。Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に新URLを追加
+  - `.github/workflows/deploy.yml`(GitHub Pagesへの自動デプロイ)は削除済み。`vite.config.ts`の`GITHUB_PAGES`環境変数によるbaseパス分岐(`/mindmap_drive/`プレフィックス)も不要になったため削除(Cloudflare Pagesはドメインルート配信のため`base: '/'`のデフォルトのままでよい)
+  - 詳細は`README.md`の「デプロイ(Cloudflare Pages)」節を参照
 - 残っているのは真の狭幅(スマホ実機)ビューポートでの目視確認のみ(あれば尚可、必須ではない)
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
 
