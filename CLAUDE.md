@@ -65,7 +65,7 @@ src/
   - **デプロイ先はGitHub Pagesに決定**(当初Vercelを検討したが、リポジトリをPublic化する方針に変更したため切り替え)。`gh` CLIをインストールのうえ、リポジトリのPublic化・`VITE_GOOGLE_CLIENT_ID`のリポジトリシークレット登録・GitHub Pages有効化(ソース: GitHub Actions)を実施済み。`.github/workflows/deploy.yml`でpushをトリガーに自動デプロイする。公開URL: `https://rouninnomi.github.io/mindmap_drive/`
   - Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に `https://rouninnomi.github.io` を追加済み
 - **公開後、実際の利用の中でのユーザーフィードバックにより追加した機能・修正(2026-09-19〜20)**
-  - 選択中・文字入力中どちらもEnterで兄弟追加/Tabで子追加に統一(以前は選択中のEnterのみ挙動が違った)。文字入力中の`Shift+Enter`でカーソル位置のテキスト分割(`MindMap.splitNode`)、`Ctrl+クリック`/`Shift+クリック`での兄弟ノード複数選択+`Enter`でのマージ統合(`MindMap.mergeNodes`)、`Ctrl+Shift+9`/`Ctrl+Shift+0`での全展開/全折りたたみ(`MindMap.expandAll`/`collapseAll`。ブラウザの検索(Ctrl+F)用途)を追加
+  - 選択中・文字入力中どちらもEnterで兄弟追加/Tabで子追加に統一(以前は選択中のEnterのみ挙動が違った)。文字入力中の`Shift+Enter`でカーソル位置のテキスト分割(`MindMap.splitNode`)、`Ctrl+クリック`/`Shift+クリック`での兄弟ノード複数選択+`Enter`でのマージ統合(`MindMap.mergeNodes`)、`Ctrl+Shift+9`/`Ctrl+Shift+0`での全展開/全折りたたみ(`MindMap.expandAll`/`collapseAll`。ブラウザの検索(Ctrl+F)用途)を追加(後日`Ctrl+Shift+←→`に変更。理由は本ファイル下部「市販化に向けた検討」の直前の項目を参照)
   - `↑`/`↓`の移動先をDFS順から同じ親を持つ兄弟間のみに変更(子孫へ入り込んでしまい直感に反していたため)。ノードの選択・文字入力開始時に画面中央へ自動パンする機能も追加
   - 日本語IME変換中に`commitIfChanged`が発火し変換が強制確定・中断される不具合を修正(`event.isComposing`中はコミット・ショートカット処理を両方スキップ)。あわせて、文字入力中の自動保存/Undo記録を一文字ごとではなくEnter/Tab/Esc/↑↓/Undo/Redoなどノードを離れる時のみに変更(自動保存が入力中に頻繁に挟まる問題への対応。副次効果でUndo粒度も改善)
   - 画像添付に`Ctrl+V`でのクリップボード貼り付けを追加。添付画像を持つノードによるキャンバス上の重なりをレイアウトの`separation`調整で解消。画像保存先を`MindMapDrive`直下から`images/<mapId>/`のマップごとのサブフォルダへ整理(フォルダ作成の競合バグも修正)
@@ -79,6 +79,7 @@ src/
   - 詳細は`README.md`の「デプロイ(Cloudflare Pages)」節を参照
 - 残っているのは真の狭幅(スマホ実機)ビューポートでの目視確認のみ(あれば尚可、必須ではない)
 - 実装時はドメイン層→アプリケーション層→インフラ層→プレゼンテーション層の順に進め、都度ブラウザ(claude-in-chromeスキル併用)で動作確認する
+- **全展開/全折りたたみのショートカットを`Ctrl+Shift+9`/`0`から`Ctrl+Shift+→`/`←`に変更(2026-09-20)**: ユーザーの環境で`Ctrl+Shift+9`がブラウザのタブ切り替えショートカットとして扱われてしまい、アプリのショートカットとして機能しない不具合を確認。単一ノードの折りたたみ/展開(`Ctrl+←`/`Ctrl+→`)と対応する`Ctrl+Shift+←`(一括折りたたみ)/`Ctrl+Shift+→`(一括展開)に変更した。変更に伴い、単一ノード用のCtrl+矢印ハンドラがShift併用時に誤発火しないよう明示的にガードを追加(`MapEditorPage.tsx`)
 
 ## 市販化に向けた検討(2026-09-20時点、未着手)
 

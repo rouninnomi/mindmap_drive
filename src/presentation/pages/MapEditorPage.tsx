@@ -85,11 +85,12 @@ interface MapEditorPageProps {
  *   並び順で1つに統合する(`MindMap.mergeNodes`。テキストは改行連結、子・添付は
  *   先頭ノードへ集約)。`Esc`で複数選択を解除する。複数選択中は他のショートカットは
  *   何もしない(単一ノードに対する操作と意味が衝突するため)
- * - `Ctrl+Shift+9`でマップ内の全ノードを展開、`Ctrl+Shift+0`で全折りたたみする
- *   (`MindMap.expandAll`/`collapseAll`。全展開はブラウザの検索(Ctrl+F)で全文検索
- *   できるようにする用途を想定。特定ノードの操作ではないためwindowレベルで拾う。
- *   `Ctrl+9`/`Ctrl+0`はブラウザ標準の予約済みショートカット(タブ切り替え/ズーム
- *   リセット)と衝突するため採用しなかった。ユーザーフィードバックにより追加)
+ * - `Ctrl+Shift+→`でマップ内の全ノードを展開、`Ctrl+Shift+←`で全折りたたみする
+ *   (`MindMap.expandAll`/`collapseAll`。単一ノードの折りたたみ/展開(`Ctrl+←`/`Ctrl+→`)と
+ *   対応させた割り当て。全展開はブラウザの検索(Ctrl+F)で全文検索できるようにする用途を
+ *   想定。特定ノードの操作ではないためwindowレベルで拾う。当初`Ctrl+Shift+9`/`Ctrl+Shift+0`
+ *   だったが、環境によってはブラウザのタブ切り替えショートカットと衝突したため
+ *   `Ctrl+Shift+←→`に変更した。ユーザーフィードバックにより追加・変更)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -143,21 +144,21 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   }, [snapshot.map, editor])
 
   // 全展開/全折りたたみは特定のノードに対する操作ではないため、個々のノードの
-  // フォーカスに依存せず常に効くようwindowレベルで拾う。`Ctrl+9`/`Ctrl+0`はそれぞれ
-  // ブラウザ標準の「一番右のタブへ切り替え」「ズームを100%にリセット」という予約済み
-  // ショートカットと衝突しページ側から止められないため、`Ctrl+Shift+9`/`Ctrl+Shift+0`
-  // を採用した(ユーザーフィードバックにより追加)。Shift併用時は`event.key`がシフト後の
-  // 記号(例: `(`)になり得るため、レイアウトに依存しない`event.code`で判定する。
+  // フォーカスに依存せず常に効くようwindowレベルで拾う。当初`Ctrl+Shift+9`/
+  // `Ctrl+Shift+0`を採用していたが、`Ctrl+9`と誤認識してブラウザのタブ切り替え
+  // ショートカットと衝突する環境があったため、単一ノードの折りたたみ/展開
+  // (`Ctrl+←`/`Ctrl+→`)と対応させて`Ctrl+Shift+←`(一括折りたたみ)/
+  // `Ctrl+Shift+→`(一括展開)に変更した(ユーザーフィードバックにより変更)。
   useEffect(() => {
     const handleGlobalKeyDown = (event: globalThis.KeyboardEvent): void => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
       if (!isCtrlOrCmd || !event.shiftKey) {
         return
       }
-      if (event.code === 'Digit9') {
+      if (event.key === 'ArrowRight') {
         event.preventDefault()
         editor.expandAll()
-      } else if (event.code === 'Digit0') {
+      } else if (event.key === 'ArrowLeft') {
         event.preventDefault()
         editor.collapseAll()
       }
@@ -357,7 +358,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         setSelectedNodeId(nodeId.value)
         return
       }
-      if (isCtrlOrCmd && event.key === 'ArrowLeft') {
+      if (isCtrlOrCmd && !event.shiftKey && event.key === 'ArrowLeft') {
         event.preventDefault()
         const node = flattened.find((n) => n.id.equals(nodeId))
         if (node && node.children.length > 0 && !node.collapsed) {
@@ -365,12 +366,19 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         }
         return
       }
-      if (isCtrlOrCmd && event.key === 'ArrowRight') {
+      if (isCtrlOrCmd && !event.shiftKey && event.key === 'ArrowRight') {
         event.preventDefault()
         const node = flattened.find((n) => n.id.equals(nodeId))
         if (node && node.children.length > 0 && node.collapsed) {
           editor.toggleCollapse(nodeId)
         }
+        return
+      }
+      // Ctrl+Shift+←/→は一括折りたたみ/展開(windowレベルのグローバルハンドラで処理)の
+      // ためのショートカットなので、ここでは何もせず下の無修飾の矢印キー処理にも
+      // 流さない(isCtrlOrCmdの分岐だけでは`!isCtrlOrCmd`を前提にしている以降の処理と
+      // 衝突するため、ここで確実に止める)。
+      if (isCtrlOrCmd && event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         return
       }
       if (isCtrlOrCmd && event.key.toLowerCase() === 'i') {
