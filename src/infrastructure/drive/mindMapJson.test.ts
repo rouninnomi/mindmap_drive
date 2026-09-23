@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MindMap } from '../../domain/mindmap/MindMap'
 import { Attachment, MapId, MapName, NodeText } from '../../domain/mindmap/valueObjects'
-import { mindMapFromJson, mindMapToJson } from './mindMapJson'
+import { mindMapFromJson, mindMapToJson, parseMindMapJson } from './mindMapJson'
 
 describe('mindMapJson', () => {
   it('MindMapをJSONへ変換し、そこから元と同じ状態のMindMapを復元できる', () => {
@@ -38,5 +38,29 @@ describe('mindMapJson', () => {
     const roundTripped = mindMapFromJson(JSON.parse(JSON.stringify(mindMapToJson(map))))
 
     expect(roundTripped.rootNode.children.map((c) => c.text.value)).toEqual(['ノード'])
+  })
+
+  it('parseMindMapJsonは正しいスキーマのJSON文字列をパースして返す(インポート用)', () => {
+    const map = MindMap.createNew(MapId.of('drive-file-3'), MapName.of('パーステスト'))
+    map.addChildNode(map.rootNode.id, NodeText.of('ノード'))
+    const raw = JSON.stringify(mindMapToJson(map))
+
+    const json = parseMindMapJson(raw)
+
+    expect(json.schemaVersion).toBe(1)
+    expect(json.root.children.map((c) => c.text)).toEqual(['ノード'])
+  })
+
+  it('parseMindMapJsonは構文エラーのJSONに分かりやすいエラーを投げる', () => {
+    expect(() => parseMindMapJson('{ これは JSON ではない')).toThrow('構文エラー')
+  })
+
+  it('parseMindMapJsonはスキーマ形状が合わないJSONにエラーを投げる', () => {
+    expect(() => parseMindMapJson(JSON.stringify({ foo: 'bar' }))).toThrow(
+      'マインドマップのJSON形式として認識できませんでした',
+    )
+    expect(() => parseMindMapJson(JSON.stringify({ schemaVersion: 2, root: {} }))).toThrow(
+      'マインドマップのJSON形式として認識できませんでした',
+    )
   })
 })

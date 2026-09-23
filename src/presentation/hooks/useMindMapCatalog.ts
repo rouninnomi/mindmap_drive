@@ -41,6 +41,15 @@ export function useMindMapCatalog() {
     [reload],
   )
 
+  const importFromJson = useCallback(
+    async (raw: string): Promise<MapId> => {
+      const id = await catalogService.importFromJson(raw)
+      await reload()
+      return id
+    },
+    [reload],
+  )
+
   const renameMap = useCallback(
     async (id: MapId, name: MapName): Promise<void> => {
       await catalogService.renameMap(id, name)
@@ -57,5 +66,5 @@ export function useMindMapCatalog() {
     [reload],
   )
 
-  return { summaries, isLoading, error, createMap, renameMap, deleteMap }
+  return { summaries, isLoading, error, createMap, importFromJson, renameMap, deleteMap }
 }

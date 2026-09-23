@@ -32,6 +32,31 @@ interface AttachmentJson {
   addedAt: string
 }
 
+/**
+ * JSON文字列をパースし、最低限のスキーマ形状(`schemaVersion`/`root`)を検証した上で
+ * `MindMapJson`として返す(JSONインポート機能用)。破損したファイルや無関係なJSONを
+ * 読み込ませようとした場合に、ユーザーに分かりやすいエラーを返すためのもので、
+ * ノード1つ1つの詳細な妥当性までは検証しない(そこは`mindMapFromJson`が呼ぶ
+ * 各値オブジェクトのバリデーションに委ねる)。
+ */
+export function parseMindMapJson(raw: string): MindMapJson {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new Error('JSONとして読み込めませんでした(構文エラー)')
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
+    typeof (value as { root?: unknown }).root !== 'object'
+  ) {
+    throw new Error('マインドマップのJSON形式として認識できませんでした')
+  }
+  return value as MindMapJson
+}
+
 export function mindMapToJson(map: MindMap): MindMapJson {
   return {
     schemaVersion: 1,

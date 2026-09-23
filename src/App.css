@@ -200,6 +200,28 @@
   cursor: pointer;
 }
 
+.new-version-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.new-version-banner button {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
 /* マインドマップキャンバス(ノード&エッジ) */
 .mindmap-canvas {
   position: absolute;

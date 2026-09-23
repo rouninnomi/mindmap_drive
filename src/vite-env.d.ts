@@ -7,3 +7,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** `vite.config.ts`の`define`でビルド時に焼き込まれる、このバンドル自身のビルドID。 */
+declare const __APP_BUILD_ID__: string

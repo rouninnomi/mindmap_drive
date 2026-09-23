@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { MindMap } from '../domain/mindmap/MindMap'
 import type { MindMapRepository } from '../domain/mindmap/MindMapRepository'
-import { MapId, MapName, MapSummary } from '../domain/mindmap/valueObjects'
+import { MapId, MapName, MapSummary, NodeText } from '../domain/mindmap/valueObjects'
+import { mindMapToJson } from '../infrastructure/drive/mindMapJson'
 import { MindMapCatalogService } from './MindMapCatalogService'
 
 class FakeMindMapRepository implements MindMapRepository {
@@ -74,6 +75,36 @@ describe('MindMapCatalogService', () => {
     await service.deleteMap(id)
 
     expect(repository.deletedIds).toEqual([id.value])
+    expect(await service.listMaps()).toHaveLength(0)
+  })
+
+  it('importFromJsonはJSONの内容で新しいマップを作成する(idは新しいDriveファイルのものを使う)', async () => {
+    const repository = new FakeMindMapRepository()
+    const service = new MindMapCatalogService(repository)
+
+    // 元は別のマップ(別のid)からエクスポートされたJSONを想定
+    const source = MindMap.createNew(MapId.of('もとのマップのdrive-file-id'), MapName.of('インポートテスト'))
+    const child = source.addChildNode(source.rootNode.id, NodeText.of('子ノード'))
+    source.addChildNode(child, NodeText.of('孫ノード'))
+    const raw = JSON.stringify(mindMapToJson(source))
+
+    const importedId = await service.importFromJson(raw)
+
+    expect(importedId.equals(source.id)).toBe(false)
+    const restored = await repository.findById(importedId)
+    expect(restored.name.value).toBe('インポートテスト')
+    expect(restored.rootNode.children.map((n) => n.text.value)).toEqual(['子ノード'])
+    expect(restored.rootNode.children[0].children.map((n) => n.text.value)).toEqual(['孫ノード'])
+
+    const summaries = await service.listMaps()
+    expect(summaries.some((s) => s.id.equals(importedId))).toBe(true)
+  })
+
+  it('importFromJsonは不正なJSONにエラーを投げ、マップを作成しない', async () => {
+    const repository = new FakeMindMapRepository()
+    const service = new MindMapCatalogService(repository)
+
+    await expect(service.importFromJson('{ not json')).rejects.toThrow()
     expect(await service.listMaps()).toHaveLength(0)
   })
 })
