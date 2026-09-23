@@ -100,8 +100,8 @@ export class MindMapEditingService {
     this.mutate((map) => map.deleteNodes(nodeIds))
   }
 
-  pasteAfter(afterNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
-    return this.mutate((map) => map.pasteAfter(afterNodeId, sourceNodes))
+  pasteAsChild(parentNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
+    return this.mutate((map) => map.pasteAsChild(parentNodeId, sourceNodes))
   }
 
   mergeNodes(nodeIds: NodeId[]): NodeId {

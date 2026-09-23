@@ -212,18 +212,18 @@ export class MindMap {
   }
 
   /**
-   * コピー/切り取りしたノード群を、対象ノードの直後に新しい兄弟ノードとして
-   * まとめて貼り付ける(並び順は`sourceNodes`の順序を維持する)。貼り付けの都度
-   * `cloneWithNewIds`で全ノードのIDを再採番するため、同じ内容を複数回貼り付けても、
-   * またコピー元がまだ木に残っている(コピーの場合)状態で貼り付けてもIDは重複しない。
+   * コピー/切り取りしたノード群を、対象ノードの子として末尾にまとめて貼り付ける
+   * (`Tab`での子ノード追加と対になる形。並び順は`sourceNodes`の順序を維持する)。
+   * 貼り付けの都度`cloneWithNewIds`で全ノードのIDを再採番するため、同じ内容を
+   * 複数回貼り付けても、またコピー元がまだ木に残っている(コピーの場合)状態で
+   * 貼り付けてもIDは重複しない。
    */
-  pasteAfter(afterNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
-    const parent = this.findParentOrThrow(afterNodeId)
-    const index = parent.indexOfChild(afterNodeId)
+  pasteAsChild(parentNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
+    const parent = this.findNodeOrThrow(parentNodeId)
     const clones = sourceNodes.map((node) => node.cloneWithNewIds())
-    clones.forEach((clone, offset) => {
-      parent.insertChildAt(index + 1 + offset, clone)
-    })
+    for (const clone of clones) {
+      parent.appendChild(clone)
+    }
     this.touch()
     return clones.map((clone) => clone.id)
   }

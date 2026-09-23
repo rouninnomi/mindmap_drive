@@ -95,14 +95,15 @@ interface MapEditorPageProps {
  *   想定。特定ノードの操作ではないためwindowレベルで拾う。当初`Ctrl+Shift+9`/`Ctrl+Shift+0`
  *   だったが、環境によってはブラウザのタブ切り替えショートカットと衝突したため
  *   `Ctrl+Shift+←→`に変更した。ユーザーフィードバックにより追加・変更)
- * - 選択中の`Ctrl+C`/`Ctrl+X`でノードをコピー/切り取りし(`clipboardRef`。OSの
+ * - 選択中の`Ctrl+C`/`Ctrl+X`でノードをコピー/切り取りし(`nodeClipboardRef`。OSの
  *   クリップボードとは独立したアプリ内蔵のクリップボードで、画像添付用に既存の
  *   `Ctrl+V`貼り付け(`MindMapCanvasNode.tsx`の`handlePaste`)とは別経路)、貼り付け先の
- *   ノードを選択して`Ctrl+V`で押すとその直後に新しい兄弟ノードとして貼り付ける
- *   (`MindMap.pasteAfter`)。切り取りは即座に元のノードを削除する(OSのカット&ペースト
- *   と同様)。複数選択中の`Ctrl+C`/`Ctrl+X`は選択した兄弟ノードすべてを並び順で
- *   まとめてコピー/切り取りし(`MindMap.deleteNodes`で1回のUndo単位にまとめる)、
- *   `Ctrl+V`で貼り付けるとその並び順のまま連続する兄弟ノードとして挿入される。
+ *   ノードを選択して`Ctrl+V`を押すとその子として末尾に貼り付ける(`Tab`での子ノード
+ *   追加と対になる形。`MindMap.pasteAsChild`。貼り付け先が折りたたまれていれば
+ *   `Tab`と同様に展開してから貼り付ける)。切り取りは即座に元のノードを削除する
+ *   (OSのカット&ペーストと同様)。複数選択中の`Ctrl+C`/`Ctrl+X`は選択した兄弟ノード
+ *   すべてを並び順でまとめてコピー/切り取りし(`MindMap.deleteNodes`で1回のUndo単位に
+ *   まとめる)、`Ctrl+V`で貼り付けるとその並び順のまま連続する子ノードとして挿入される。
  *   貼り付けは`Node.cloneWithNewIds`で全ノードのIDを再採番するため、同じ内容を
  *   複数回貼り付けたりコピー元が残っている状態で貼り付けたりしてもID重複は起きない。
  *   文字入力中は`Ctrl+C`/`Ctrl+X`/`Ctrl+V`を横取りせず、`<input>`のネイティブな
@@ -419,7 +420,11 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         const clipboard = nodeClipboardRef.current
         if (clipboard && clipboard.length > 0) {
-          const newIds = editor.pasteAfter(nodeId, clipboard)
+          const targetNode = flattened.find((n) => n.id.equals(nodeId))
+          if (targetNode?.collapsed) {
+            editor.toggleCollapse(nodeId)
+          }
+          const newIds = editor.pasteAsChild(nodeId, clipboard)
           setSelectedNodeId(newIds[newIds.length - 1].value)
         }
         return
