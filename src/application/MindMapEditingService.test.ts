@@ -3,7 +3,40 @@ import type { AttachmentStorage } from '../domain/mindmap/AttachmentStorage'
 import { MindMap } from '../domain/mindmap/MindMap'
 import type { MindMapRepository } from '../domain/mindmap/MindMapRepository'
 import { Attachment, MapId, MapName, MapSummary, NodeText } from '../domain/mindmap/valueObjects'
+import { mindMapToJson } from '../infrastructure/drive/mindMapJson'
 import { MindMapEditingService } from './MindMapEditingService'
+
+/**
+ * テスト実行環境(vitestのデフォルトのnode環境)には`localStorage`が存在しないため、
+ * ローカルドラフト機能のテスト用にメモリ上だけの最小限の実装を用意する。
+ */
+class MemoryStorage implements Storage {
+  private readonly store = new Map<string, string>()
+
+  get length(): number {
+    return this.store.size
+  }
+
+  clear(): void {
+    this.store.clear()
+  }
+
+  getItem(key: string): string | null {
+    return this.store.has(key) ? this.store.get(key)! : null
+  }
+
+  key(index: number): string | null {
+    return Array.from(this.store.keys())[index] ?? null
+  }
+
+  removeItem(key: string): void {
+    this.store.delete(key)
+  }
+
+  setItem(key: string, value: string): void {
+    this.store.set(key, value)
+  }
+}
 
 class FakeMindMapRepository implements MindMapRepository {
   readonly saveCalls: MindMap[] = []
@@ -68,10 +101,12 @@ async function loadedService(): Promise<{
 describe('MindMapEditingService', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubGlobal('localStorage', new MemoryStorage())
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('loadするとgetSnapshotForRenderに読み込んだマップが反映される', async () => {
@@ -261,5 +296,122 @@ describe('MindMapEditingService', () => {
     expect(json.schemaVersion).toBe(1)
     expect(json.id).toBe(map.id.value)
     expect(json.root.children.map((n: { text: string }) => n.text)).toEqual(['未保存のノード'])
+  })
+
+  it('編集するとlocalStorageにドラフトが保存され、保存成功後は消える(自動保存が効かない時の復旧用)', async () => {
+    const { service, repository, map } = await loadedService()
+    const key = `mindmap-drive:draft:${map.id.value}`
+
+    service.addChildNode(map.rootNode.id, NodeText.of('A'))
+    expect(localStorage.getItem(key)).not.toBeNull()
+
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(repository.saveCalls).toHaveLength(1)
+    expect(localStorage.getItem(key)).toBeNull()
+  })
+
+  it('loadした時、Driveの内容より新しいローカルドラフトがあれば復元候補として検出する(Driveの内容はそのまま使う)', async () => {
+    const map = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    const repository = new FakeMindMapRepository(map)
+    const key = 'mindmap-drive:draft:map-1'
+    const newerDraft = {
+      ...mindMapToJson(map),
+      updatedAt: new Date(map.updatedAt.getTime() + 1000).toISOString(),
+    }
+    localStorage.setItem(key, JSON.stringify(newerDraft))
+
+    const service = new MindMapEditingService(repository, new FakeAttachmentStorage())
+    await service.load(MapId.of('map-1'))
+
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(true)
+    expect(service.getSnapshotForRender().map).toBe(map)
+  })
+
+  it('loadした時、ローカルドラフトがDriveの内容と同じかそれより古ければ復元候補にはならない(掃除される)', async () => {
+    const map = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    const repository = new FakeMindMapRepository(map)
+    const key = 'mindmap-drive:draft:map-1'
+    const olderDraft = {
+      ...mindMapToJson(map),
+      updatedAt: new Date(map.updatedAt.getTime() - 1000).toISOString(),
+    }
+    localStorage.setItem(key, JSON.stringify(olderDraft))
+
+    const service = new MindMapEditingService(repository, new FakeAttachmentStorage())
+    await service.load(MapId.of('map-1'))
+
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(false)
+    expect(localStorage.getItem(key)).toBeNull()
+  })
+
+  it('restoreDraftでローカルドラフトの内容を採用し、Driveへ保存し直す', async () => {
+    const map = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    const repository = new FakeMindMapRepository(map)
+    const key = 'mindmap-drive:draft:map-1'
+    const draftMap = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    draftMap.addChildNode(draftMap.rootNode.id, NodeText.of('ドラフトの内容'))
+    const newerDraft = {
+      ...mindMapToJson(draftMap),
+      updatedAt: new Date(map.updatedAt.getTime() + 1000).toISOString(),
+    }
+    localStorage.setItem(key, JSON.stringify(newerDraft))
+
+    const service = new MindMapEditingService(repository, new FakeAttachmentStorage())
+    await service.load(MapId.of('map-1'))
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(true)
+
+    service.restoreDraft()
+
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(false)
+    expect(
+      service.getSnapshotForRender().map?.rootNode.children.map((n) => n.text.value),
+    ).toEqual(['ドラフトの内容'])
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(repository.saveCalls).toHaveLength(1)
+  })
+
+  it('discardDraftでローカルドラフトを破棄し、Driveの内容のまま使う', async () => {
+    const map = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    const repository = new FakeMindMapRepository(map)
+    const key = 'mindmap-drive:draft:map-1'
+    const newerDraft = {
+      ...mindMapToJson(map),
+      updatedAt: new Date(map.updatedAt.getTime() + 1000).toISOString(),
+    }
+    localStorage.setItem(key, JSON.stringify(newerDraft))
+
+    const service = new MindMapEditingService(repository, new FakeAttachmentStorage())
+    await service.load(MapId.of('map-1'))
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(true)
+
+    service.discardDraft()
+
+    expect(service.getSnapshotForRender().pendingDraftRecovery).toBe(false)
+    expect(service.getSnapshotForRender().map).toBe(map)
+    expect(localStorage.getItem(key)).toBeNull()
+  })
+
+  it('復元候補があるうちは、その場で編集してもドラフトを上書きしない(復元前に消えるのを防ぐ)', async () => {
+    const map = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    const repository = new FakeMindMapRepository(map)
+    const key = 'mindmap-drive:draft:map-1'
+    const draftMap = MindMap.createNew(MapId.of('map-1'), MapName.of('編集テスト'))
+    draftMap.addChildNode(draftMap.rootNode.id, NodeText.of('ドラフトの内容'))
+    const newerDraft = {
+      ...mindMapToJson(draftMap),
+      updatedAt: new Date(map.updatedAt.getTime() + 1000).toISOString(),
+    }
+    const originalDraftRaw = JSON.stringify(newerDraft)
+    localStorage.setItem(key, originalDraftRaw)
+
+    const service = new MindMapEditingService(repository, new FakeAttachmentStorage())
+    await service.load(MapId.of('map-1'))
+
+    // バナーに気付く前にDrive側の(復元前の)内容を編集してしまうケース
+    service.addChildNode(map.rootNode.id, NodeText.of('気付かず編集'))
+
+    expect(localStorage.getItem(key)).toBe(originalDraftRaw)
   })
 })

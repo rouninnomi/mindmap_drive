@@ -155,13 +155,15 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   // (「思考のスピードを止めない」ため、すぐ入力を始められるようにする)。
   // 対象ノードのDOM(input)がまだ存在しなくても、selectedNodeId/editingNodeIdへの反映だけで
   // よい(実際のフォーカス移動はMindMapCanvasNode自身のマウント時effectが行うため)。
+  // ローカルドラフトの復元可否をユーザーが判断する前に空ノードを追加してしまうと、
+  // その編集で復元前のドラフトを上書きしてしまうため、復元バナー表示中は行わない。
   useEffect(() => {
-    if (snapshot.map && snapshot.map.rootNode.children.length === 0) {
+    if (snapshot.map && snapshot.map.rootNode.children.length === 0 && !snapshot.pendingDraftRecovery) {
       const newId = editor.addChildNode(snapshot.map.rootNode.id, NodeText.empty())
       setSelectedNodeId(newId.value)
       setEditingNodeId(newId.value)
     }
-  }, [snapshot.map, editor])
+  }, [snapshot.map, snapshot.pendingDraftRecovery, editor])
 
   // 全展開/全折りたたみは特定のノードに対する操作ではないため、個々のノードの
   // フォーカスに依存せず常に効くようwindowレベルで拾う。当初`Ctrl+Shift+9`/
@@ -750,6 +752,17 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         onBack={onBack}
         onRename={handleRename}
       />
+      {snapshot.pendingDraftRecovery && (
+        <div className="draft-recovery-banner">
+          <span>自動保存されなかった可能性のある変更が見つかりました。復元しますか?</span>
+          <button type="button" onClick={() => editor.restoreDraft()}>
+            復元する
+          </button>
+          <button type="button" onClick={() => editor.discardDraft()}>
+            破棄する
+          </button>
+        </div>
+      )}
       <div className="mindmap-canvas">
         <OutlineEditorContext.Provider value={contextValue}>
           <ReactFlow

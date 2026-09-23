@@ -178,6 +178,28 @@
   display: none;
 }
 
+.draft-recovery-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.draft-recovery-banner button {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
 /* マインドマップキャンバス(ノード&エッジ) */
 .mindmap-canvas {
   position: absolute;
