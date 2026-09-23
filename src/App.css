@@ -179,6 +179,8 @@
 }
 
 .draft-recovery-banner {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -201,6 +203,8 @@
 }
 
 .new-version-banner {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
