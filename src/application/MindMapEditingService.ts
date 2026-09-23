@@ -10,6 +10,7 @@ import type {
   NodeId,
   NodeText,
 } from '../domain/mindmap/valueObjects'
+import { mindMapToJson } from '../infrastructure/drive/mindMapJson'
 
 const UNDO_STACK_LIMIT = 50
 const AUTO_SAVE_DEBOUNCE_MS = 1500
@@ -206,6 +207,17 @@ export class MindMapEditingService {
   /** 保存インジケータ表示用。 */
   isSaving(): boolean {
     return this.saving
+  }
+
+  /**
+   * 自動保存が効かない等アプリの挙動がおかしい時の保険として、現在のマップ内容を
+   * JSON文字列として取り出す(Driveへの保存と同じスキーマ)。保存済みかどうかに
+   * 関わらず、現在メモリ上にある内容(未保存の変更も含む)をそのまま反映する
+   * (ユーザーフィードバックにより追加)。
+   */
+  exportJson(): string {
+    const map = this.requireCurrent()
+    return JSON.stringify(mindMapToJson(map), null, 2)
   }
 
   private mutate<T>(operation: (map: MindMap) => T): T {

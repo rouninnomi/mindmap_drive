@@ -251,4 +251,15 @@ describe('MindMapEditingService', () => {
 
     expect(service.isSaving()).toBe(false)
   })
+
+  it('exportJsonは未保存の変更も含めた現在の内容をDrive保存と同じJSONスキーマで返す(保険用)', async () => {
+    const { service, map } = await loadedService()
+    service.addChildNode(map.rootNode.id, NodeText.of('未保存のノード'))
+
+    const json = JSON.parse(service.exportJson())
+
+    expect(json.schemaVersion).toBe(1)
+    expect(json.id).toBe(map.id.value)
+    expect(json.root.children.map((n: { text: string }) => n.text)).toEqual(['未保存のノード'])
+  })
 })
