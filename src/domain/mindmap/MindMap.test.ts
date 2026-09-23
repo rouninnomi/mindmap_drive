@@ -254,6 +254,33 @@ describe('MindMap', () => {
     expect(map.rootNode.findById(b)?.collapsed).toBe(true)
   })
 
+  it('expandNextLevelは押すたびに1階層ずつ深く展開する(Ctrl+→連打での掘り下げ)', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addChildNode(a, NodeText.of('B'))
+    const c = map.addChildNode(b, NodeText.of('C'))
+    map.addChildNode(c, NodeText.of('D'))
+    // 新規ノードはデフォルトで展開済みのため、実際の利用時と同様まずAだけ畳んでおく
+    map.toggleCollapse(a)
+
+    expect(map.hasMoreToExpand(a)).toBe(true)
+    map.expandNextLevel(a) // 1回目: Bまで表示、Bは畳んだまま
+    expect(map.rootNode.findById(a)?.collapsed).toBe(false)
+    expect(map.rootNode.findById(b)?.collapsed).toBe(true)
+
+    expect(map.hasMoreToExpand(a)).toBe(true)
+    map.expandNextLevel(a) // 2回目: Cまで表示、Cは畳んだまま
+    expect(map.rootNode.findById(b)?.collapsed).toBe(false)
+    expect(map.rootNode.findById(c)?.collapsed).toBe(true)
+
+    expect(map.hasMoreToExpand(a)).toBe(true)
+    map.expandNextLevel(a) // 3回目: Dまで表示(Dは子が無いので折りたたみ対象外)
+    expect(map.rootNode.findById(c)?.collapsed).toBe(false)
+
+    // これ以上展開する階層は無い
+    expect(map.hasMoreToExpand(a)).toBe(false)
+  })
+
   it('expandAll/collapseAllでマップ内の全ノードを一括展開/折りたたみできる', () => {
     const map = newMap()
     const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))

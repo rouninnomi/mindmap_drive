@@ -234,6 +234,61 @@ export class MindMap {
   }
 
   /**
+   * 選択ノードを起点に、まだ折りたたまれている最も浅い階層を1段階だけ展開する
+   * (Ctrl+→を押すたびに子→孫→…と階層を1段ずつ掘り下げていけるようにする。
+   * ユーザーフィードバックにより追加)。ノード自身が折りたたまれていれば
+   * (1回目の押下相当)`toggleCollapse`と同じく直下の子まで表示し孫以降は
+   * 折りたたんだままにする。既に展開済みなら、木構造上最も浅い「まだ折りたたまれて
+   * 子を持つノード」の階層をすべて一括で展開する(枝ごとに深さがばらついていても、
+   * それぞれ最初に現れる折りたたみ済みの階層が展開される)。これ以上展開できる
+   * 階層が無ければ何もしない。
+   */
+  expandNextLevel(nodeId: NodeId): void {
+    const node = this.findNodeOrThrow(nodeId)
+    if (node.collapsed) {
+      this.toggleCollapse(nodeId)
+      return
+    }
+    const frontier = this.findNextLevelFrontier(node)
+    if (!frontier) {
+      return
+    }
+    for (const n of frontier) {
+      n.setCollapsed(false)
+      for (const grandchild of n.children) {
+        grandchild.setCollapsed(true)
+      }
+    }
+    this.touch()
+  }
+
+  /**
+   * `expandNextLevel`で実際に展開できる階層が残っているかを判定する(読み取り専用)。
+   * Ctrl+→を展開しきった後に連打しても意味の無いUndoエントリを積まないよう、
+   * 呼び出し側(`MapEditorPage.tsx`)がこれで事前にガードする。
+   */
+  hasMoreToExpand(nodeId: NodeId): boolean {
+    const node = this.findNodeOrThrow(nodeId)
+    if (node.collapsed) {
+      return true
+    }
+    return this.findNextLevelFrontier(node) !== null
+  }
+
+  /** `node`の子孫のうち、木構造上最も浅い「まだ折りたたまれて子を持つノード」の階層を返す。無ければnull。 */
+  private findNextLevelFrontier(node: Node): Node[] | null {
+    let frontier: Node[] = [...node.children]
+    while (frontier.length > 0) {
+      const toExpand = frontier.filter((n) => n.collapsed && n.children.length > 0)
+      if (toExpand.length > 0) {
+        return toExpand
+      }
+      frontier = frontier.filter((n) => !n.collapsed).flatMap((n) => n.children)
+    }
+    return null
+  }
+
+  /**
    * マップ内の全ノードを展開する(ブラウザの検索(Ctrl+F)で全文検索できるようにする
    * 用途を想定。ユーザーフィードバックにより追加)。
    */

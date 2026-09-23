@@ -116,6 +116,10 @@ export class MindMapEditingService {
     this.mutate((map) => map.toggleCollapse(nodeId))
   }
 
+  expandNextLevel(nodeId: NodeId): void {
+    this.mutate((map) => map.expandNextLevel(nodeId))
+  }
+
   expandAll(): void {
     this.mutate((map) => map.expandAll())
   }

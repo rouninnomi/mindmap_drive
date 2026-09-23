@@ -58,7 +58,11 @@ interface MapEditorPageProps {
  * - ノード削除(`Backspace`/`Delete`)は、選択中はテキストの有無によらず即削除。文字入力中は
  *   従来通りテキストが空の時のみノード自体を削除する(それ以外は通常の文字削除)
  * - 折りたたみ/展開は選択中のみ`Ctrl+←`(折りたたみ)/`Ctrl+→`(展開)に割り当てる
- *   (文字入力中はテキストカーソルの単語移動という標準動作と衝突するため割り当てない)
+ *   (文字入力中はテキストカーソルの単語移動という標準動作と衝突するため割り当てない)。
+ *   `Ctrl+→`は1回の押下では直下の子までしか展開しない(孫以降は折りたたんだまま。
+ *   `Node.toggleCollapse`参照)ため、選択ノードを変えずに`Ctrl+→`を押し続けることで
+ *   孫・ひ孫…と1階層ずつ掘り下げて展開できる(`MindMap.expandNextLevel`。
+ *   ユーザーフィードバックにより追加)
  * - 画像添付は選択中・文字入力中どちらでも`Ctrl+I`。ノードへ画像ファイルを直接
  *   ドラッグ&ドロップして添付することもできる
  * - ノード間移動の↑↓: 選択中・文字入力中どちらも同じ親を持つ前後の兄弟ノードへ移動する
@@ -460,9 +464,8 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       }
       if (isCtrlOrCmd && !event.shiftKey && event.key === 'ArrowRight') {
         event.preventDefault()
-        const node = flattened.find((n) => n.id.equals(nodeId))
-        if (node && node.children.length > 0 && node.collapsed) {
-          editor.toggleCollapse(nodeId)
+        if (snapshot.map?.hasMoreToExpand(nodeId)) {
+          editor.expandNextLevel(nodeId)
         }
         return
       }
