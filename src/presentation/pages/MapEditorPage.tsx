@@ -91,6 +91,18 @@ interface MapEditorPageProps {
  *   想定。特定ノードの操作ではないためwindowレベルで拾う。当初`Ctrl+Shift+9`/`Ctrl+Shift+0`
  *   だったが、環境によってはブラウザのタブ切り替えショートカットと衝突したため
  *   `Ctrl+Shift+←→`に変更した。ユーザーフィードバックにより追加・変更)
+ * - 選択中の`Ctrl+C`/`Ctrl+X`でノードをコピー/切り取りし(`clipboardRef`。OSの
+ *   クリップボードとは独立したアプリ内蔵のクリップボードで、画像添付用に既存の
+ *   `Ctrl+V`貼り付け(`MindMapCanvasNode.tsx`の`handlePaste`)とは別経路)、貼り付け先の
+ *   ノードを選択して`Ctrl+V`で押すとその直後に新しい兄弟ノードとして貼り付ける
+ *   (`MindMap.pasteAfter`)。切り取りは即座に元のノードを削除する(OSのカット&ペースト
+ *   と同様)。複数選択中の`Ctrl+C`/`Ctrl+X`は選択した兄弟ノードすべてを並び順で
+ *   まとめてコピー/切り取りし(`MindMap.deleteNodes`で1回のUndo単位にまとめる)、
+ *   `Ctrl+V`で貼り付けるとその並び順のまま連続する兄弟ノードとして挿入される。
+ *   貼り付けは`Node.cloneWithNewIds`で全ノードのIDを再採番するため、同じ内容を
+ *   複数回貼り付けたりコピー元が残っている状態で貼り付けたりしてもID重複は起きない。
+ *   文字入力中は`Ctrl+C`/`Ctrl+X`/`Ctrl+V`を横取りせず、`<input>`のネイティブな
+ *   テキスト選択コピー&ペーストをそのまま使えるようにする(選択中のみのショートカット)
  */
 export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const { snapshot, editor } = useMindMapEditor(mapId)
@@ -104,6 +116,9 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const attachTargetRef = useRef<NodeId | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const isDraggingRef = useRef(false)
+  // ノードのコピー&ペースト用のアプリ内蔵クリップボード。OSのクリップボードとは
+  // 独立しており、再レンダリングを引き起こす必要が無いためuseStateではなくrefで持つ。
+  const nodeClipboardRef = useRef<DomainNode[] | null>(null)
 
   const flattened = useMemo(() => {
     if (!snapshot.map) {
@@ -300,6 +315,31 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [snapshot.map],
   )
 
+  // 複数選択中(multiSelectedIds + アンカーのnodeId)の兄弟ノードを、ツリー上の
+  // 並び順に揃えて実体(DomainNode)で返す(コピー/切り取り用)。異なる親を持つ
+  // ノード同士は複数選択できない仕様のため、いずれか1つの親から全ノードが見つかる。
+  const collectSelectedSiblingNodes = useCallback(
+    (anchorNodeId: NodeId): DomainNode[] | null => {
+      const root = snapshot.map?.rootNode
+      if (!root) {
+        return null
+      }
+      const ids = Array.from(new Set([...multiSelectedIds, anchorNodeId.value]))
+      const parent = root.findParentOf(NodeIdValueObject.of(ids[0]))
+      if (!parent) {
+        return null
+      }
+      const sorted = [...ids].sort(
+        (a, b) =>
+          parent.indexOfChild(NodeIdValueObject.of(a)) - parent.indexOfChild(NodeIdValueObject.of(b)),
+      )
+      return sorted.map((id) => parent.children.find((child) => child.id.value === id)).filter(
+        (n): n is DomainNode => n !== undefined,
+      )
+    },
+    [multiSelectedIds, snapshot.map],
+  )
+
   // 選択中のEnterは常に新規の兄弟ノードを作るため、既存ノードのテキストを
   // 後から編集したい場合はダブルクリックで文字入力モードに入る。
   const handleWrapperDoubleClick = useCallback((nodeId: NodeId) => {
@@ -310,8 +350,11 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   // ノードが「選択」状態(文字入力モードではない)の時のキー操作。
   const handleSelectedKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => {
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey
+
       // Ctrl+クリック/Shift+クリックで2つ以上選択中は、単一ノード向けの通常の
-      // ショートカットとは意味が衝突するため扱わない。Enterで統合、Escで選択解除のみ行う。
+      // ショートカットとは意味が衝突するため扱わない。Enterで統合、Escで選択解除、
+      // Ctrl+C/Ctrl+Xでの複数ノードまとめてのコピー/切り取りのみ行う。
       if (multiSelectedIds.size > 0) {
         if (event.key === 'Enter') {
           event.preventDefault()
@@ -323,11 +366,60 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
           setSelectedNodeId(mergedId.value)
         } else if (event.key === 'Escape') {
           setMultiSelectedIds(new Set())
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 'c') {
+          event.preventDefault()
+          const selected = collectSelectedSiblingNodes(nodeId)
+          if (selected && selected.length > 0) {
+            nodeClipboardRef.current = selected.map((n) => n.clone())
+          }
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 'x') {
+          event.preventDefault()
+          const selected = collectSelectedSiblingNodes(nodeId)
+          const root = snapshot.map?.rootNode
+          if (selected && selected.length > 0 && root) {
+            nodeClipboardRef.current = selected.map((n) => n.clone())
+            // 削除後は、切り取ったノード群の親(常に選択集合には含まれない)を
+            // 選択状態にする。ルート直下(トップレベル)をすべて切り取った場合は
+            // 非表示のルートノードには選択が戻らないようnullにする。
+            const parent = root.findParentOf(selected[0].id)
+            editor.deleteNodes(selected.map((n) => n.id))
+            setMultiSelectedIds(new Set())
+            setSelectedNodeId(parent && !parent.id.equals(root.id) ? parent.id.value : null)
+          }
         }
         return
       }
 
-      const isCtrlOrCmd = event.ctrlKey || event.metaKey
+      if (isCtrlOrCmd && event.key.toLowerCase() === 'c') {
+        event.preventDefault()
+        const node = snapshot.map?.rootNode.findById(nodeId)
+        if (node) {
+          nodeClipboardRef.current = [node.clone()]
+        }
+        return
+      }
+      if (isCtrlOrCmd && event.key.toLowerCase() === 'x') {
+        event.preventDefault()
+        const node = snapshot.map?.rootNode.findById(nodeId)
+        if (node) {
+          nodeClipboardRef.current = [node.clone()]
+          const index = flattened.findIndex((n) => n.id.equals(nodeId))
+          const fallback = flattened[index - 1] ?? flattened[index + 1] ?? null
+          editor.deleteNode(nodeId)
+          setEditingNodeId(null)
+          setSelectedNodeId(fallback ? fallback.id.value : null)
+        }
+        return
+      }
+      if (isCtrlOrCmd && event.key.toLowerCase() === 'v') {
+        event.preventDefault()
+        const clipboard = nodeClipboardRef.current
+        if (clipboard && clipboard.length > 0) {
+          const newIds = editor.pasteAfter(nodeId, clipboard)
+          setSelectedNodeId(newIds[newIds.length - 1].value)
+        }
+        return
+      }
 
       if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
         event.preventDefault()
@@ -448,7 +540,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         }
       }
     },
-    [editor, flattened, snapshot.map, findSibling, multiSelectedIds],
+    [editor, flattened, snapshot.map, findSibling, multiSelectedIds, collectSelectedSiblingNodes],
   )
 
   // ノードが「文字入力」状態の時のキー操作。

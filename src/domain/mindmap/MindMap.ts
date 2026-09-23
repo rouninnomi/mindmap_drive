@@ -198,6 +198,36 @@ export class MindMap {
     this.touch()
   }
 
+  /**
+   * 複数のノードをまとめて削除する(Ctrl+Xでの複数選択カット用)。1ノードずつ
+   * `deleteNode`を呼ぶとUndoが複数回に分かれてしまうため、1回の操作としてUndo
+   * できるようこのメソッドでまとめて行う。子孫ノードもそれぞれカスケード削除される。
+   */
+  deleteNodes(nodeIds: NodeId[]): void {
+    for (const nodeId of nodeIds) {
+      const parent = this.findParentOrThrow(nodeId)
+      parent.removeChildAt(parent.indexOfChild(nodeId))
+    }
+    this.touch()
+  }
+
+  /**
+   * コピー/切り取りしたノード群を、対象ノードの直後に新しい兄弟ノードとして
+   * まとめて貼り付ける(並び順は`sourceNodes`の順序を維持する)。貼り付けの都度
+   * `cloneWithNewIds`で全ノードのIDを再採番するため、同じ内容を複数回貼り付けても、
+   * またコピー元がまだ木に残っている(コピーの場合)状態で貼り付けてもIDは重複しない。
+   */
+  pasteAfter(afterNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
+    const parent = this.findParentOrThrow(afterNodeId)
+    const index = parent.indexOfChild(afterNodeId)
+    const clones = sourceNodes.map((node) => node.cloneWithNewIds())
+    clones.forEach((clone, offset) => {
+      parent.insertChildAt(index + 1 + offset, clone)
+    })
+    this.touch()
+    return clones.map((clone) => clone.id)
+  }
+
   toggleCollapse(nodeId: NodeId): void {
     this.findNodeOrThrow(nodeId).toggleCollapse()
     this.touch()

@@ -1,5 +1,6 @@
 import type { AttachmentStorage } from '../domain/mindmap/AttachmentStorage'
 import { MindMap } from '../domain/mindmap/MindMap'
+import type { Node } from '../domain/mindmap/Node'
 import type { MindMapRepository } from '../domain/mindmap/MindMapRepository'
 import type {
   AttachmentId,
@@ -93,6 +94,14 @@ export class MindMapEditingService {
 
   deleteNode(nodeId: NodeId): void {
     this.mutate((map) => map.deleteNode(nodeId))
+  }
+
+  deleteNodes(nodeIds: NodeId[]): void {
+    this.mutate((map) => map.deleteNodes(nodeIds))
+  }
+
+  pasteAfter(afterNodeId: NodeId, sourceNodes: Node[]): NodeId[] {
+    return this.mutate((map) => map.pasteAfter(afterNodeId, sourceNodes))
   }
 
   mergeNodes(nodeIds: NodeId[]): NodeId {

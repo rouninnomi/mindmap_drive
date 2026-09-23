@@ -150,4 +150,19 @@ export class Node {
       [...this._attachments],
     )
   }
+
+  /**
+   * `clone()`と異なり、自分自身と子孫すべてに新しいIDを採番して複製する
+   * (コピー&ペースト用。同じ内容を複数回貼り付けたり、コピー元がまだ木に
+   * 残っている状態で貼り付けたりしてもIDが重複しないようにするため)。
+   */
+  cloneWithNewIds(): Node {
+    return new Node(
+      NodeId.generate(),
+      this._text,
+      this._children.map((child) => child.cloneWithNewIds()),
+      this._collapsed,
+      [...this._attachments],
+    )
+  }
 }

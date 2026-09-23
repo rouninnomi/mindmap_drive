@@ -157,6 +157,52 @@ describe('MindMap', () => {
     expect(map.rootNode.findById(child)).toBeUndefined()
   })
 
+  it('deleteNodesで複数の兄弟ノードをまとめて削除する', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    map.addChildNode(map.rootNode.id, NodeText.of('B'))
+    const c = map.addChildNode(map.rootNode.id, NodeText.of('C'))
+    map.deleteNodes([c, a])
+    expect(topLevelTexts(map)).toEqual(['B'])
+    expect(map.rootNode.findById(a)).toBeUndefined()
+    expect(map.rootNode.findById(c)).toBeUndefined()
+  })
+
+  it('pasteAfterで対象ノードの直後にコピー元ノード群を並び順のまま新しい兄弟として貼り付ける(IDは再採番される)', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const target = map.addSiblingNode(a, NodeText.of('貼り付け先'))
+    const source = map.addChildNode(map.rootNode.id, NodeText.of('コピー元'))
+    const sourceChild = map.addChildNode(source, NodeText.of('コピー元の子'))
+    map.attachImage(source, Attachment.create('file-source'))
+    const sourceNode = map.rootNode.findById(source)!
+
+    const [pastedId] = map.pasteAfter(target, [sourceNode])
+
+    expect(topLevelTexts(map)).toEqual(['A', '貼り付け先', 'コピー元', 'コピー元'])
+    expect(pastedId.equals(source)).toBe(false)
+    const pasted = map.rootNode.findById(pastedId)
+    expect(pasted?.text.value).toBe('コピー元')
+    expect(pasted?.children.map((n) => n.text.value)).toEqual(['コピー元の子'])
+    expect(pasted?.children[0].id.equals(sourceChild)).toBe(false)
+    expect(pasted?.attachments.map((att) => att.driveFileId)).toEqual(['file-source'])
+    // コピー元はそのまま残る
+    expect(map.rootNode.findById(source)).toBeDefined()
+  })
+
+  it('pasteAfterは同じ内容を複数回貼り付けてもIDが重複しない', () => {
+    const map = newMap()
+    const target = map.addChildNode(map.rootNode.id, NodeText.of('貼り付け先'))
+    const source = map.rootNode.findById(map.addChildNode(map.rootNode.id, NodeText.of('コピー元')))!
+
+    const [firstPasteId] = map.pasteAfter(target, [source])
+    const [secondPasteId] = map.pasteAfter(target, [source])
+
+    expect(firstPasteId.equals(secondPasteId)).toBe(false)
+    expect(map.rootNode.findById(firstPasteId)).toBeDefined()
+    expect(map.rootNode.findById(secondPasteId)).toBeDefined()
+  })
+
   it('mergeNodesで兄弟ノードを1つに統合する(テキストは並び順で改行連結、子と添付は先頭ノードへ集約)', () => {
     const map = newMap()
     const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
