@@ -86,6 +86,48 @@
   - [x] Google Cloud ConsoleのOAuthクライアントIDの承認済みJavaScript生成元に上記オリジンを追加済み
 - [x] READMEの整備(セットアップ手順、Google Cloud設定手順、コマンド一覧、デプロイ手順)
 
+## 6. agyによるプロジェクト全体コードレビューへの対応(2026-09-24)
+
+agy(Gemini系AI CLI、`gemini-3.1-pro-high`)に`src/`配下のドメイン層・アプリケーション層・インフラ層・プレゼンテーション層を読み取り専用でレビューさせた。DDDレイヤリングの依存方向(domainがReact/Google Driveに非依存であること等)は「非常に高い水準で遵守」との評価。以下、指摘事項を深刻度順に記載し、対応が完了次第チェックする。
+
+- [x] **(agyの指摘は誤り、コード確認の結果「実際には再現しない」と判明)最後のノード削除時にUndoが実質不可能になる、との指摘**
+  - agyは`MapEditorPage.tsx` 160〜166行目の`useEffect`(`children.length === 0`で空ノードを自動追加)が依存配列`[snapshot.map, ...]`のため編集のたびに毎回発火すると指摘したが、実際には`MindMapEditingService.notify()`(`MindMapEditingService.ts` 359〜368行目)が`renderSnapshot.map`に常に同一の`this.current`インスタンス(ミューテートされるのみで再代入されない)を詰めているため、`snapshot.map`の参照は`load()`時以外変化しない。React側の依存配列比較(`Object.is`)によりこの`useEffect`は初回ロード時以外は再実行されず、agyが説明した「空ノード自動追加のループでUndoスタックが壊れる」という現象は起きないことをコードを追って確認した
+  - 教訓として記録: 自動生成のコードレビュー指摘は、依存配列やオブジェクト参照の安定性など実行時の詳細を裏取りしてから対応すること
+- [x] **【深刻度：中、修正済み】Undo/Redo直後にフォーカスが消失しキーボード操作が不能になるケースが残っていた**
+  - `MapEditorPage.tsx`の`handleSelectedKeyDown`/`handleEditingKeyDown`(Undo/Redoのキー処理)で、Undo/Redoによってツリーから消滅したノードのIDを`selectedNodeId`にセットし続けるケースがあり(対象DOMが存在せずフォーカスが`document.body`へ抜ける)、コード追跡で再現ロジックを確認した本物のバグだった
+  - 修正: `restoreFocusAfterHistoryChange`ヘルパーを追加(`MapEditorPage.tsx`)。Undo/Redo後にnodeIdが木構造上に存在するか`root.findById`で確認し、存在すればそのまま選択・存在しなければUndo/Redo前の並び順に近いノードへフォールバックする(`flattenVisibleNodes`で再計算した最新の並びから、元の位置→ひとつ前→先頭の順で探す)
+  - `npm run build` / `npm test`(61件)/ `npm run lint`はいずれも通過確認済み。ブラウザでの実機確認はOAuthログインのポップアップがclaude-in-chromeのタブ管理外で開いてしまい自動化できなかったため未実施(手動確認が必要)
+- [ ] **【深刻度：低】自分の現在の親へドラッグ&ドロップすると兄弟内で最後尾にジャンプする**
+  - `MindMap.ts` 141〜152行目(`moveNode`)。循環参照チェックはすり抜けてエラーにはならないが、削除→再追加により並び順が末尾に変わってしまう
+- [ ] **【深刻度：低】画像アップロード時にMIMEタイプを検証せず拡張子を生成**
+  - `DriveAttachmentStorage.ts` 36〜37行目。表示は`<img>`経由でXSSリスクはないが、偽装ファイルの拡張子がそのままDriveに反映されうる
+- [ ] **【深刻度：低、任意】`MapEditorPage.tsx`の肥大化(約800行)**
+  - キーボードショートカット処理(`handleSelectedKeyDown`/`handleEditingKeyDown`)を`useMindMapShortcuts`等のカスタムフックへ切り出す余地
+- [ ] **【深刻度：低、任意】JSONインポート時のバリデーションが浅い**
+  - `mindMapJson.ts` 49〜57行目の`parseMindMapJson`はトップレベルの存在確認のみで、`root.children`が配列かどうか等の深い構造チェックがなく、不正なJSONインポート時に実行時エラーでクラッシュしうる。Zod等のスキーマバリデーション導入を検討
+
+## 7. 【最優先】長時間利用後、マップ一覧に戻ると再ログインを求められ、かつ自動保存が古い状態までしか反映されていない問題(2026-09-24、ユーザー報告)
+
+ユーザーからの報告: マップを長時間開いたまま編集していると、マップ一覧画面に戻ろうとした際に再ログインを求められることがある。さらにその時点でDrive上に保存されているマップの内容がかなり前の自動保存分までしか反映されておらず、ローカルドラフト復旧バナー(いわゆる「ローカルドラフト」機構、`MindMapEditingService.persistDraft`/`readNewerDraft`、`CLAUDE.md`の「自動保存が失われる根本原因の特定とローカルドラフトによる自動復旧を追加」の節参照)からいちいち復元する必要があり、手間になっている。
+
+原因推定の確度が高く(調査(1)〜(4)、ユーザーの実体験とも一致)、実際のデータ保存の信頼性に関わるため、他のagyレビュー対応(6節)より優先して着手すること。
+
+- [x] 調査(1): ノード確定時に「すぐ保存が走る」ように見えるものの正体を特定
+  - ユーザーからの質問(「いきなりGoogle Driveに書き込んでいるわけではないのでは」)を受けてコードを確認。`MindMapEditingService.mutate()`(`MindMapEditingService.ts` 259〜268行目)は、ノード確定のたびに①`persistDraft()`で`localStorage`へ同期的に即時書き込み(Driveではない)、②`scheduleAutoSave()`で1.5秒デバウンスのタイマーをセットするだけ、の2つを行う。実際にGoogle Drive APIへ書き込む`flushPendingSave()`(同188〜203行目)が呼ばれるのは編集の手が1.5秒止まった後であり、ツールバーの「保存中…」表示(`Toolbar.tsx:59`、`isSaving()`)もその実行中にしか出ない。ユーザーの見立て通り、確定直後に即座に反映されるのはローカルの下書きのみで、Driveへの実書き込みは非同期・遅延して行われる設計
+- [x] 調査(2): 上記調査の過程で、自動保存失敗が握りつぶされている実装上の欠陥を発見
+  - `flushPendingSave()`(`MindMapEditingService.ts` 188〜203行目)は`await this.repository.save(this.current)`を`try`していても`catch`していない(`finally`のみ)。OAuthトークン期限切れ(`GoogleAuthRequiredError`)やネットワークエラーで`save()`が例外を投げると、`isDirty`は`true`のまま・`clearDraft()`も呼ばれずに例外が上位へ伝播する。呼び出し元は`scheduleAutoSave()`内の`void this.flushPendingSave()`のため、この例外はキャッチされずに闇に消える(UI上は「保存中…」がふっと消えるだけで、失敗を示す手段が一切ない)
+  - これは長時間利用後の再ログイン要求・自動保存反映漏れ問題の直接の原因候補と考えられる: トークンが切れた時点から以降の全編集でDriveへの保存が静かに失敗し続け、localStorageのドラフトだけが最新状態を保持する(データ消失は免れるが、ユーザーは保存失敗に気付けず、再ログイン後に毎回手動でドラフト復元が必要になる)
+- [x] 調査(3): なぜ「いつの間にか」ログイン切れに気づけないのか、トークン期限管理の実装を確認
+  - `GoogleAuth`(`googleAuth.ts`)は、アクセストークン取得時に`expiresAt`(安全マージン60秒引き)を`sessionStorage`へ記録するが、この期限チェックが行われるのは**インスタンス生成時(`loadStoredToken()`、コンストラクタで1回のみ)だけ**。一度メモリ上の`this.accessToken`に載ったら、`getAccessToken()`(99〜108行目)はその後一切期限を再チェックせず`if (this.accessToken) return this.accessToken`でそのまま返し続ける
+  - そのため、タブを開いたまま1時間程度(実トークンの有効期限)を超えて編集を続けても、アプリ側は気づかず同じ(実際には失効した)トークンをDrive APIに渡し続ける
+  - 実際にDrive APIが401を返しても、`authorizedFetch`(`driveApi.ts:12-25`)は`GoogleAuthRequiredError`ではなく汎用`Error`を投げるだけなので、上記`flushPendingSave()`の`catch`漏れと合わさって、期限切れは画面上どこにも表面化しない。ユーザーが気づけるのは、ページ再読み込みやマップ一覧遷移などで`GoogleAuth`が作り直される(`loadStoredToken()`が再度呼ばれ、ようやく期限切れが検出される)タイミングまで先延ばしになる
+- [x] 調査(4): 上記の推定メカニズムについて、ユーザーから「説明された通りの動きが実際に起こっている気がする」との実体験ベースの裏付けを得た(ブラウザでの機械的な再現テストは未実施だが、原因推定の確度は上がったと判断)
+- [ ] 修正: `flushPendingSave()`に`catch`を追加し、保存失敗(特に`GoogleAuthRequiredError`)を`isDirty`等の内部状態はそのまま保ちつつ、presentation層へ伝える手段を用意する(例: `renderSnapshot`に`saveError`のようなフィールドを追加)
+- [ ] 修正: 保存失敗時、ツールバー等に「自動保存に失敗しました。再ログインが必要な可能性があります」といった分かりやすい通知を出し、ローカルドラフト復旧に頼らずその場で再ログイン→再試行できるようにする
+- [ ] 検討: フォーカス/可視性が戻ったタイミング(`visibilitychange`、既存の`useNewVersionAvailable`と同様のパターン)でトークンの有効性を事前にチェックし、切れていれば早期に再ログインを促す
+
+OAuthトークンの`sessionStorage`保存については「SPA構成として妥当」との評価で対応不要。
+
 ## 進め方の原則
 
 - 各層の実装後、`npm run build` の型チェックが通ることを確認してから次の層へ進む

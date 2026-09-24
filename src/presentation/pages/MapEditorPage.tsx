@@ -309,6 +309,30 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [selectedNodeId, snapshot.map],
   )
 
+  // Undo/Redoは、操作対象だったノード自体が新規追加/削除された変更を取り消す場合があり、
+  // その場合Undo/Redo後にはnodeIdが木構造上に存在しない。存在しないノードIDをそのまま
+  // selectedNodeIdにセットすると対応するDOM要素が無くフォーカスが当たらず、以降の
+  // キーボードショートカットが一切効かなくなる不具合があったため、その場合は
+  // (Undo/Redo前の)並び順で近かったノードへフォールバックする。
+  const restoreFocusAfterHistoryChange = useCallback(
+    (nodeId: NodeId) => {
+      const root = snapshot.map?.rootNode
+      if (!root) {
+        setSelectedNodeId(null)
+        return
+      }
+      if (root.findById(nodeId)) {
+        setSelectedNodeId(nodeId.value)
+        return
+      }
+      const freshFlattened = flattenVisibleNodes(root)
+      const previousIndex = flattened.findIndex((n) => n.id.equals(nodeId))
+      const fallback = freshFlattened[previousIndex] ?? freshFlattened[previousIndex - 1] ?? freshFlattened[0] ?? null
+      setSelectedNodeId(fallback ? fallback.id.value : null)
+    },
+    [snapshot.map, flattened],
+  )
+
   // ↑↓での移動は同じ親を持つ兄弟間のみとする(親子間の移動は←→が担う)。
   const findSibling = useCallback(
     (nodeId: NodeId, offset: number): DomainNode | null => {
@@ -436,7 +460,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         editor.undo()
         setEditingNodeId(null)
-        setSelectedNodeId(nodeId.value)
+        restoreFocusAfterHistoryChange(nodeId)
         return
       }
       if (
@@ -446,7 +470,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         editor.redo()
         setEditingNodeId(null)
-        setSelectedNodeId(nodeId.value)
+        restoreFocusAfterHistoryChange(nodeId)
         return
       }
       if (isCtrlOrCmd && event.key === 'ArrowUp') {
@@ -550,7 +574,15 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         }
       }
     },
-    [editor, flattened, snapshot.map, findSibling, multiSelectedIds, collectSelectedSiblingNodes],
+    [
+      editor,
+      flattened,
+      snapshot.map,
+      findSibling,
+      multiSelectedIds,
+      collectSelectedSiblingNodes,
+      restoreFocusAfterHistoryChange,
+    ],
   )
 
   // ノードが「文字入力」状態の時のキー操作。
@@ -569,7 +601,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         editor.undo()
         setEditingNodeId(null)
-        setSelectedNodeId(nodeId.value)
+        restoreFocusAfterHistoryChange(nodeId)
         return
       }
       if (
@@ -579,7 +611,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         event.preventDefault()
         editor.redo()
         setEditingNodeId(null)
-        setSelectedNodeId(nodeId.value)
+        restoreFocusAfterHistoryChange(nodeId)
         return
       }
       if (isCtrlOrCmd && event.key.toLowerCase() === 'i') {
@@ -651,7 +683,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         setEditingNodeId(null)
       }
     },
-    [editor, flattened, findSibling],
+    [editor, flattened, findSibling, restoreFocusAfterHistoryChange],
   )
 
   const handleNodeDragStart = useCallback<OnNodeDrag<MindMapFlowNode>>(() => {
