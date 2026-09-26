@@ -124,6 +124,11 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   // ノードのコピー&ペースト用のアプリ内蔵クリップボード。OSのクリップボードとは
   // 独立しており、再レンダリングを引き起こす必要が無いためuseStateではなくrefで持つ。
   const nodeClipboardRef = useRef<DomainNode[] | null>(null)
+  // Shift+↑↓での範囲選択の起点(アンカー)。Shift+クリックと異なり連続した
+  // キー操作で選択範囲を伸縮させ続ける必要があるため、複数選択が始まった時点の
+  // ノードIDをrefで保持する(multiSelectedIdsは範囲そのものの表示用でしかなく、
+  // アンカー自身の情報を保持していないため別途必要)。
+  const multiSelectAnchorRef = useRef<string | null>(null)
 
   const flattened = useMemo(() => {
     if (!snapshot.map) {
@@ -303,6 +308,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       const targetIndex = anchorParent.indexOfChild(nodeId)
       const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
       const range = anchorParent.children.slice(start, end + 1).map((n) => n.id.value)
+      multiSelectAnchorRef.current = anchorId
       setMultiSelectedIds(new Set(range))
       setSelectedNodeId(nodeId.value)
     },
@@ -371,6 +377,39 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [multiSelectedIds, snapshot.map],
   )
 
+  // 切り取り(Ctrl+X)後にフォーカスを移す先を決める。削除対象の兄弟ノード群
+  // (`selectedIds`。単一切り取りなら要素数1)の直後の兄弟→直前の兄弟→親
+  // (ルート直下ならフォーカス無し)の優先順で探す。削除される側の部分木の中に
+  // フォールバック先が入り込むことは構造上ありえないため、削除直後でも必ず
+  // 存在するノードにフォーカスが移る(切り取り後に画面が大きく飛ぶ・存在しない
+  // ノードへフォーカスしようとして操作不能になる、を避けるためユーザー
+  // フィードバックにより追加)。
+  const findSiblingOrParentFallback = useCallback(
+    (selectedIds: NodeId[]): DomainNode | null => {
+      const root = snapshot.map?.rootNode
+      if (!root || selectedIds.length === 0) {
+        return null
+      }
+      const parent = root.findParentOf(selectedIds[0])
+      if (!parent) {
+        return null
+      }
+      const indices = selectedIds.map((id) => parent.indexOfChild(id))
+      const minIndex = Math.min(...indices)
+      const maxIndex = Math.max(...indices)
+      const nextSibling = parent.children[maxIndex + 1] ?? null
+      const prevSibling = minIndex > 0 ? parent.children[minIndex - 1] : null
+      if (nextSibling) {
+        return nextSibling
+      }
+      if (prevSibling) {
+        return prevSibling
+      }
+      return parent.id.equals(root.id) ? null : parent
+    },
+    [snapshot.map],
+  )
+
   // 選択中のEnterは常に新規の兄弟ノードを作るため、既存ノードのテキストを
   // 後から編集したい場合はダブルクリックで文字入力モードに入る。
   const handleWrapperDoubleClick = useCallback((nodeId: NodeId) => {
@@ -382,6 +421,45 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
   const handleSelectedKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>, nodeId: NodeId) => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey
+
+      // Shift+↑/↓: 同じ親を持つ兄弟間で選択範囲を1つずつ伸縮させる
+      // (Ctrl+クリック/Shift+クリックと同じ「兄弟のみ複数選択」仕様に合わせる。
+      // ユーザーフィードバックにより追加)。連続して押し続けても同じアンカーから
+      // 伸縮できるよう、範囲の起点は`multiSelectAnchorRef`に保持し、新規に
+      // 範囲選択を始める時(まだ複数選択が無い時)だけ現在のノードで上書きする。
+      // アンカーまで戻って範囲が1件になったら、単一選択に戻す(複数選択のまま
+      // だとEnterでの統合等、他のショートカットの意味と衝突するため)。
+      if (!isCtrlOrCmd && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        event.preventDefault()
+        const root = snapshot.map?.rootNode
+        if (!root) {
+          return
+        }
+        if (multiSelectedIds.size === 0) {
+          multiSelectAnchorRef.current = nodeId.value
+        }
+        const anchorId = multiSelectAnchorRef.current
+        if (!anchorId) {
+          return
+        }
+        const anchorParent = root.findParentOf(NodeIdValueObject.of(anchorId))
+        const currentParent = root.findParentOf(nodeId)
+        if (!anchorParent || anchorParent !== currentParent) {
+          return
+        }
+        const currentIndex = anchorParent.indexOfChild(nodeId)
+        const nextIndex = event.key === 'ArrowUp' ? currentIndex - 1 : currentIndex + 1
+        const nextNode = anchorParent.children[nextIndex]
+        if (!nextNode) {
+          return
+        }
+        const anchorIndex = anchorParent.indexOfChild(NodeIdValueObject.of(anchorId))
+        const [start, end] = anchorIndex < nextIndex ? [anchorIndex, nextIndex] : [nextIndex, anchorIndex]
+        const range = anchorParent.children.slice(start, end + 1).map((n) => n.id.value)
+        setMultiSelectedIds(new Set(range.length > 1 ? range : []))
+        setSelectedNodeId(nextNode.id.value)
+        return
+      }
 
       // Ctrl+クリック/Shift+クリックで2つ以上選択中は、単一ノード向けの通常の
       // ショートカットとは意味が衝突するため扱わない。Enterで統合、Escで選択解除、
@@ -406,16 +484,12 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         } else if (isCtrlOrCmd && event.key.toLowerCase() === 'x') {
           event.preventDefault()
           const selected = collectSelectedSiblingNodes(nodeId)
-          const root = snapshot.map?.rootNode
-          if (selected && selected.length > 0 && root) {
+          if (selected && selected.length > 0) {
             nodeClipboardRef.current = selected.map((n) => n.clone())
-            // 削除後は、切り取ったノード群の親(常に選択集合には含まれない)を
-            // 選択状態にする。ルート直下(トップレベル)をすべて切り取った場合は
-            // 非表示のルートノードには選択が戻らないようnullにする。
-            const parent = root.findParentOf(selected[0].id)
+            const fallback = findSiblingOrParentFallback(selected.map((n) => n.id))
             editor.deleteNodes(selected.map((n) => n.id))
             setMultiSelectedIds(new Set())
-            setSelectedNodeId(parent && !parent.id.equals(root.id) ? parent.id.value : null)
+            setSelectedNodeId(fallback ? fallback.id.value : null)
           }
         }
         return
@@ -434,8 +508,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
         const node = snapshot.map?.rootNode.findById(nodeId)
         if (node) {
           nodeClipboardRef.current = [node.clone()]
-          const index = flattened.findIndex((n) => n.id.equals(nodeId))
-          const fallback = flattened[index - 1] ?? flattened[index + 1] ?? null
+          const fallback = findSiblingOrParentFallback([nodeId])
           editor.deleteNode(nodeId)
           setEditingNodeId(null)
           setSelectedNodeId(fallback ? fallback.id.value : null)
@@ -581,6 +654,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
       findSibling,
       multiSelectedIds,
       collectSelectedSiblingNodes,
+      findSiblingOrParentFallback,
       restoreFocusAfterHistoryChange,
     ],
   )
@@ -686,20 +760,76 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     [editor, flattened, findSibling, restoreFocusAfterHistoryChange],
   )
 
-  const handleNodeDragStart = useCallback<OnNodeDrag<MindMapFlowNode>>(() => {
-    isDraggingRef.current = true
-  }, [])
+  // 複数選択中のノードをドラッグした時、選択されたノードすべてをまとめて動かす
+  // ための起点位置(ドラッグ開始時点の各ノードの座標)。React Flowはドラッグ対象の
+  // 1ノード分の位置しか更新しないため、`handleNodeDrag`で残りの選択ノードの位置を
+  // 手動で追従させる。単一ノードのドラッグ(複数選択が無い、またはドラッグ対象が
+  // 選択集合に含まれない)ならnullのままとし、既存の単一ドラッグの挙動を変えない
+  // (ユーザーフィードバックにより追加)。
+  const dragGroupStartPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null)
+
+  const handleNodeDragStart = useCallback<OnNodeDrag<MindMapFlowNode>>(
+    (_event, draggedNode) => {
+      isDraggingRef.current = true
+      const groupIds = new Set(multiSelectedIds)
+      if (selectedNodeId) {
+        groupIds.add(selectedNodeId)
+      }
+      if (groupIds.size > 1 && groupIds.has(draggedNode.id)) {
+        const positions = new Map<string, { x: number; y: number }>()
+        for (const n of nodes) {
+          if (groupIds.has(n.id)) {
+            positions.set(n.id, { x: n.position.x, y: n.position.y })
+          }
+        }
+        dragGroupStartPositionsRef.current = positions
+      } else {
+        dragGroupStartPositionsRef.current = null
+      }
+    },
+    [multiSelectedIds, selectedNodeId, nodes],
+  )
+
+  // ドラッグ中、グループの他のノードをドラッグ対象ノードと同じ移動量だけ追従させる
+  // (React Flow自身はドラッグ対象の1ノードの位置しか更新しないため)。
+  const handleNodeDrag = useCallback<OnNodeDrag<MindMapFlowNode>>(
+    (_event, draggedNode) => {
+      const startPositions = dragGroupStartPositionsRef.current
+      const startPos = startPositions?.get(draggedNode.id)
+      if (!startPositions || !startPos) {
+        return
+      }
+      const dx = draggedNode.position.x - startPos.x
+      const dy = draggedNode.position.y - startPos.y
+      setNodes((currentNodes) =>
+        currentNodes.map((n) => {
+          if (n.id === draggedNode.id) {
+            return n
+          }
+          const orig = startPositions.get(n.id)
+          if (!orig) {
+            return n
+          }
+          return { ...n, position: { x: orig.x + dx, y: orig.y + dy } }
+        }),
+      )
+    },
+    [setNodes],
+  )
 
   const handleNodeDragStop = useCallback<OnNodeDrag<MindMapFlowNode>>(
     (_event, draggedNode) => {
       isDraggingRef.current = false
+      const groupPositions = dragGroupStartPositionsRef.current
+      dragGroupStartPositionsRef.current = null
+      const groupIds = groupPositions ? new Set(groupPositions.keys()) : new Set([draggedNode.id])
 
       const centerX = draggedNode.position.x + CANVAS_NODE_WIDTH / 2
       const centerY = draggedNode.position.y + CANVAS_NODE_HEIGHT / 2
 
       const target = nodes.find(
         (candidate) =>
-          candidate.id !== draggedNode.id &&
+          !groupIds.has(candidate.id) &&
           centerX >= candidate.position.x &&
           centerX <= candidate.position.x + CANVAS_NODE_WIDTH &&
           centerY >= candidate.position.y &&
@@ -708,10 +838,29 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
 
       if (target) {
         try {
-          editor.moveNode(NodeIdValueObject.of(draggedNode.id), NodeIdValueObject.of(target.id))
+          if (groupPositions && groupPositions.size > 1) {
+            // 複数選択をまとめてドラッグした場合、木構造上の並び順を保ったまま
+            // 対象ノードの子として移動する(`MindMap.moveNodes`で1回のUndo単位)。
+            const root = snapshot.map?.rootNode
+            const idsInOrder = [...groupIds].sort((a, b) => {
+              const parent = root?.findParentOf(NodeIdValueObject.of(a))
+              if (!parent) {
+                return 0
+              }
+              return (
+                parent.indexOfChild(NodeIdValueObject.of(a)) - parent.indexOfChild(NodeIdValueObject.of(b))
+              )
+            })
+            editor.moveNodes(
+              idsInOrder.map((id) => NodeIdValueObject.of(id)),
+              NodeIdValueObject.of(target.id),
+            )
+          } else {
+            editor.moveNode(NodeIdValueObject.of(draggedNode.id), NodeIdValueObject.of(target.id))
+          }
         } catch {
-          // 自分自身の子孫へドロップした場合など、無効な再親子付けは無視して
-          // レイアウト再計算により元の位置へ戻す。
+          // 自分自身(またはグループ内の他のノード)の子孫へドロップした場合など、
+          // 無効な再親子付けは無視してレイアウト再計算により元の位置へ戻す。
         }
       }
 
@@ -804,6 +953,7 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
             onEdgesChange={onEdgesChange}
             nodeTypes={NODE_TYPES}
             onNodeDragStart={handleNodeDragStart}
+            onNodeDrag={handleNodeDrag}
             onNodeDragStop={handleNodeDragStop}
             nodesConnectable={false}
             elementsSelectable={false}

@@ -147,6 +147,30 @@ describe('MindMap', () => {
     expect(() => map.moveNode(parent, parent)).toThrow()
   })
 
+  it('moveNodesで複数の兄弟ノードをまとめて別ノードの子として並び順を保ったまま移動する', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addSiblingNode(a, NodeText.of('B'))
+    const c = map.addSiblingNode(b, NodeText.of('C'))
+    const dest = map.addSiblingNode(c, NodeText.of('移動先'))
+
+    map.moveNodes([a, c], dest)
+
+    expect(topLevelTexts(map)).toEqual(['B', '移動先'])
+    const destNode = map.rootNode.findById(dest)
+    expect(destNode?.children.map((n) => n.text.value)).toEqual(['A', 'C'])
+  })
+
+  it('moveNodesは移動対象のいずれかの子孫への移動(循環参照)を禁止し、何も変更しない', () => {
+    const map = newMap()
+    const a = map.addChildNode(map.rootNode.id, NodeText.of('A'))
+    const b = map.addSiblingNode(a, NodeText.of('B'))
+    const childOfB = map.addChildNode(b, NodeText.of('Bの子'))
+
+    expect(() => map.moveNodes([a, b], childOfB)).toThrow()
+    expect(topLevelTexts(map)).toEqual(['A', 'B'])
+  })
+
   it('deleteNodeは子孫ノードもまとめてカスケード削除する', () => {
     const map = newMap()
     const parent = map.addChildNode(map.rootNode.id, NodeText.of('親'))

@@ -152,6 +152,30 @@ export class MindMap {
   }
 
   /**
+   * 複数のノードをまとめて別ノードの子として移動する(複数選択したノードの
+   * ドラッグ&ドロップでの再親子付け用)。1ノードずつ`moveNode`を呼ぶとUndoが
+   * 複数回に分かれてしまうため、1回の操作としてまとめる。`nodeIds`の並び順を
+   * 保ったまま、対象ノードの子として末尾に追加する。
+   */
+  moveNodes(nodeIds: NodeId[], newParentId: NodeId): void {
+    const newParent = this.findNodeOrThrow(newParentId)
+    const nodes = nodeIds.map((id) => this.findNodeOrThrow(id))
+    for (const node of nodes) {
+      if (node.findById(newParentId)) {
+        throw new Error(`Cannot move a node into itself or its own descendant: ${node.id.value}`)
+      }
+    }
+    for (const node of nodes) {
+      const oldParent = this.findParentOrThrow(node.id)
+      oldParent.removeChildAt(oldParent.indexOfChild(node.id))
+    }
+    for (const node of nodes) {
+      newParent.appendChild(node)
+    }
+    this.touch()
+  }
+
+  /**
    * 同じ親を持つ兄弟ノード2つ以上を1つに統合する(Ctrl+クリック/Shift+クリックでの
    * 複数選択に対応。ユーザーフィードバックにより追加)。テキストは兄弟内の並び順で
    * 改行連結し、子ノード・添付画像もすべて先頭(並び順で最初)のノードへ集約する。
