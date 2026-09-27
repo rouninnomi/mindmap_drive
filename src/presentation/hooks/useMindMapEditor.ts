@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { MapId } from '../../domain/mindmap/valueObjects'
 import { MindMapEditingService } from '../../application/MindMapEditingService'
-import { attachmentStorage, mindMapRepository } from '../services'
+import { attachmentStorage, googleAuth, mindMapRepository } from '../services'
 
 /**
  * `MindMapEditingService`をReactへ接続するフック(architecture.md 3節)。
@@ -39,7 +39,18 @@ export function useMindMapEditor(mapId: MapId) {
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'hidden') {
         flushActiveEditAndSave()
+        return
       }
+      // タブがバックグラウンドから復帰した瞬間、次にDrive APIを呼ぶより前に
+      // 先回りでアクセストークンの有効性を確認しておく(期限切れなら無言の
+      // 再認可を試みる)。バックグラウンドタブはタイマー処理がスロットリング
+      // されるため、期限切れに気付くのが実際にAPI呼び出しが失敗するまで
+      // 遅れがちな問題への対策(docs/task.md 7節、`GoogleAuth.getAccessToken`
+      // 参照)。ここで失敗しても何もしない(次の保存の`saveError`バナーで
+      // ユーザーに伝わる)。
+      void googleAuth.getAccessToken().catch(() => {
+        // 握りつぶす(上記コメント参照)
+      })
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('beforeunload', flushActiveEditAndSave)

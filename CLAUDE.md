@@ -95,6 +95,13 @@ src/
   - 選択中の`Shift+↑`/`Shift+↓`で、`Shift+クリック`と同じ「兄弟のみ」の範囲選択ができるように追加。押し続けて伸縮でき、範囲の起点(アンカー)は`multiSelectAnchorRef`で保持し、アンカーまで戻ると単一選択に自動で戻る
   - 複数選択したノードをまとめてドラッグ&ドロップで再親子付けできるように追加。ドラッグ中は選択ノード全員を追従させ(`onNodeDrag`)、ドロップ時に並び順を保ったまままとめて移動する(ドメイン層に新規追加した`MindMap.moveNodes`/`MindMapEditingService.moveNodes`で1回のUndo単位にまとめる)
   - ユーザー自身がGoogleログインの上で手動確認し、問題ない旨を確認済み(Google OAuthはClaudeが代行できないため、claude-in-chromeでの自動結合テストは今回未実施)
+- **JSONレスキュー(コピー/新しいタブで開く)ボタンを廃止し、ショートカット一覧ダイアログに置き換え(2026-09-27)**: ユーザーから「不要になった」とのフィードバックにより、ツールバーの「JSONをコピー」「JSONを新しいタブで開く」ボタンと`MindMapEditingService.exportJson()`を削除(ローカルドラフト自動復旧・新バージョン検知など根本対応が揃ったため緊急避難手段としての役割を終えた。JSONインポート機能自体は影響を受けず存続)。代わりに`ShortcutsHelpDialog.tsx`を新規追加し、ツールバーの「ショートカット一覧」ボタンから開けるモーダルで`MapEditorPage.tsx`冒頭コメントに列挙された全ショートカットをグループ別(選択中・文字入力中共通/選択中のみ/文字入力中のみ/全体)に一覧表示する
+- **長時間タブを開きっぱなしにするとGoogle認証が切れる問題を調査・修正(2026-09-27)**: ユーザーから継続報告を受け、agy(Gemini系CLI)にセカンドオピニオンとして原因調査を依頼。実は`docs/task.md` 7節(2026-09-24付、ユーザー報告)で既に同じ問題の根本原因調査が完了済みだったことが判明し、agyの独立分析も同じ2点を優先度高として指摘(裏付けが取れた)。原因は`GoogleAuth.getAccessToken()`(`googleAuth.ts`)が起動時(`loadStoredToken`)にしか有効期限をチェックしておらず、一度メモリに載ったトークンをその後無条件に返し続けていたこと(タブを開いたまま実際のトークン有効期限である1時間程度を超えても気付けない)、かつ`authorizedFetch`の401が汎用`Error`にしかならず`flushPendingSave()`もそれを`catch`していなかったため、期限切れ後の自動保存失敗が画面上どこにも表面化しなかったこと。加えてagyの分析で、無言の再認可が同時に複数箇所から呼ばれると`this.pending`を上書きし合い先に呼ばれた側が永遠に解決しない競合バグも新たに発見。以下を修正した:
+  - `GoogleAuth`: `getAccessToken()`呼び出しのたびにメモリ上の`expiresAt`を確認し期限切れなら無言の再認可(`prompt: ''`)を試みるよう変更。進行中の再認可Promiseを使い回すことで上記の競合バグも解消(`googleAuth.test.ts`を新規追加しユニットテストで確認)
+  - `MindMapEditingService.flushPendingSave()`に`catch`を追加し、保存失敗(`GoogleAuthRequiredError`か否かを`isAuthError`として判別)を`saveError`として`MindMapEditorSnapshot`経由でpresentation層へ伝えるように変更(`isDirty`はtrueのまま・ドラフトも消さず保持)
+  - `MapEditorPage.tsx`に保存失敗バナーを追加。認証切れなら「再ログインする」(クリックで`googleAuth.login()`→保存を再試行)、それ以外は「再試行する」ボタンを表示
+  - `useMindMapEditor.ts`の`visibilitychange`ハンドラを拡張し、タブがバックグラウンドから復帰した瞬間に先回りで`googleAuth.getAccessToken()`を呼び、期限切れなら早期に無言の再認可を試みるようにした
+  - 詳細な調査経緯は`docs/task.md` 7節を参照。Google OAuthはClaudeが代行できないため、実際にブラウザで長時間放置してのエンドツーエンド確認はユーザー自身に依頼する必要がある(ユニットテストと型チェック/lintでのみ確認済み)
 
 ユーザーから「将来的に市販化するなら何をクリアする必要があるか」を問われた際の検討メモ。現時点では方針決定・着手はしておらず、あくまで論点の記録。
 

@@ -24,6 +24,7 @@ import { OutlineEditorContext, type OutlineEditorContextValue } from '../compone
 import { Toolbar } from '../components/Toolbar'
 import { useMindMapEditor } from '../hooks/useMindMapEditor'
 import { flattenVisibleNodes } from '../outlineTree'
+import { googleAuth } from '../services'
 
 const NODE_TYPES = { [MIND_MAP_NODE_TYPE]: MindMapCanvasNode }
 
@@ -886,6 +887,17 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
     editor.rename(MapName.of(next.trim()))
   }, [editor, snapshot.map])
 
+  // 自動保存失敗バナーの「再ログインする」ボタン。Googleへの再認可自体は
+  // editorの外(googleAuthシングルトン)が持つため、成功後に保存を明示的に
+  // 再試行する(次の編集を待たずその場で結果が分かるようにする)。
+  const handleReloginAndRetrySave = useCallback(() => {
+    void googleAuth.login().then(() => editor.flushPendingSave())
+  }, [editor])
+
+  const handleRetrySave = useCallback(() => {
+    void editor.flushPendingSave()
+  }, [editor])
+
   const contextValue: OutlineEditorContextValue = useMemo(
     () => ({
       selectedNodeId,
@@ -942,6 +954,24 @@ export function MapEditorPage({ mapId, onBack }: MapEditorPageProps) {
           <button type="button" onClick={() => editor.discardDraft()}>
             破棄する
           </button>
+        </div>
+      )}
+      {snapshot.saveError && (
+        <div className="save-error-banner">
+          <span>
+            {snapshot.saveError.isAuthError
+              ? '自動保存に失敗しました。長時間の作業でGoogleの認証が切れた可能性があります。'
+              : `自動保存に失敗しました: ${snapshot.saveError.message}`}
+          </span>
+          {snapshot.saveError.isAuthError ? (
+            <button type="button" onClick={handleReloginAndRetrySave}>
+              再ログインする
+            </button>
+          ) : (
+            <button type="button" onClick={handleRetrySave}>
+              再試行する
+            </button>
+          )}
         </div>
       )}
       <div className="mindmap-canvas">

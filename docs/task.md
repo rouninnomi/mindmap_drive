@@ -122,9 +122,10 @@ agy(Gemini系AI CLI、`gemini-3.1-pro-high`)に`src/`配下のドメイン層・
   - そのため、タブを開いたまま1時間程度(実トークンの有効期限)を超えて編集を続けても、アプリ側は気づかず同じ(実際には失効した)トークンをDrive APIに渡し続ける
   - 実際にDrive APIが401を返しても、`authorizedFetch`(`driveApi.ts:12-25`)は`GoogleAuthRequiredError`ではなく汎用`Error`を投げるだけなので、上記`flushPendingSave()`の`catch`漏れと合わさって、期限切れは画面上どこにも表面化しない。ユーザーが気づけるのは、ページ再読み込みやマップ一覧遷移などで`GoogleAuth`が作り直される(`loadStoredToken()`が再度呼ばれ、ようやく期限切れが検出される)タイミングまで先延ばしになる
 - [x] 調査(4): 上記の推定メカニズムについて、ユーザーから「説明された通りの動きが実際に起こっている気がする」との実体験ベースの裏付けを得た(ブラウザでの機械的な再現テストは未実施だが、原因推定の確度は上がったと判断)
-- [ ] 修正: `flushPendingSave()`に`catch`を追加し、保存失敗(特に`GoogleAuthRequiredError`)を`isDirty`等の内部状態はそのまま保ちつつ、presentation層へ伝える手段を用意する(例: `renderSnapshot`に`saveError`のようなフィールドを追加)
-- [ ] 修正: 保存失敗時、ツールバー等に「自動保存に失敗しました。再ログインが必要な可能性があります」といった分かりやすい通知を出し、ローカルドラフト復旧に頼らずその場で再ログイン→再試行できるようにする
-- [ ] 検討: フォーカス/可視性が戻ったタイミング(`visibilitychange`、既存の`useNewVersionAvailable`と同様のパターン)でトークンの有効性を事前にチェックし、切れていれば早期に再ログインを促す
+- [x] 修正(2026-09-27): `flushPendingSave()`に`catch`を追加し、保存失敗(`GoogleAuthRequiredError`か否かを`isAuthError`として判別)を`isDirty`はtrueのまま・ドラフトも消さずに保ち、`MindMapEditorSnapshot.saveError`としてpresentation層へ伝えるようにした
+- [x] 修正(2026-09-27): `MapEditorPage.tsx`に自動保存失敗バナーを追加。認証切れの場合は「再ログインする」(`googleAuth.login()`→`flushPendingSave()`を再試行)、それ以外は「再試行する」ボタンを出す
+- [x] 修正(2026-09-27): `GoogleAuth.getAccessToken()`が、以前は起動時(`loadStoredToken`)にしか有効期限をチェックしておらず、一度メモリに載ったトークンをその後無条件に返し続けていたバグを修正。呼び出しのたびにメモリ上の`expiresAt`を確認し、期限切れなら無言の再認可(`prompt: ''`)を試みるようにした。あわせて、無言の再認可が同時に複数箇所(複数のDrive API呼び出し等)から呼ばれた際に`this.pending`を上書きし合い先に呼ばれた側が永遠に解決しなくなる競合バグも発見・修正(進行中の再認可Promiseを使い回す)。ユーザーからの継続報告を受け、agy(Gemini系CLI、セカンドオピニオン)による独立調査でも同じ2点が優先度高として指摘され、確度が上がった
+- [x] 対応(2026-09-27): `useMindMapEditor.ts`の`visibilitychange`ハンドラを拡張し、タブがバックグラウンドから復帰した瞬間(`visible`)に`googleAuth.getAccessToken()`を先回りで呼び、期限切れなら無言の再認可を試みるようにした(バックグラウンドタブのタイマースロットリングで、実際にDrive APIを呼ぶまで期限切れに気付けないことへの対策)
 
 OAuthトークンの`sessionStorage`保存については「SPA構成として妥当」との評価で対応不要。
 

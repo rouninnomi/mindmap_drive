@@ -10,6 +10,7 @@ import type {
   NodeId,
   NodeText,
 } from '../domain/mindmap/valueObjects'
+import { GoogleAuthRequiredError } from '../infrastructure/drive/googleAuth'
 import { mindMapFromJson, mindMapToJson, type MindMapJson } from '../infrastructure/drive/mindMapJson'
 
 const UNDO_STACK_LIMIT = 50
@@ -24,6 +25,11 @@ export interface MindMapEditorSnapshot {
   readonly map: MindMap | null
   /** 自動保存されなかった可能性のあるローカルドラフトが見つかっているか。 */
   readonly pendingDraftRecovery: boolean
+  /**
+   * 直近の自動保存が失敗した場合のエラー情報(presentation層でのバナー表示用)。
+   * 保存に成功する、またはマップを読み込み直すとクリアされる。
+   */
+  readonly saveError: { message: string; isAuthError: boolean } | null
 }
 
 /**
@@ -41,7 +47,13 @@ export class MindMapEditingService {
   private isDirty = false
   private saving = false
   private pendingDraftRecovery: MindMapJson | null = null
-  private renderSnapshot: MindMapEditorSnapshot = { version: 0, map: null, pendingDraftRecovery: false }
+  private saveError: Error | null = null
+  private renderSnapshot: MindMapEditorSnapshot = {
+    version: 0,
+    map: null,
+    pendingDraftRecovery: false,
+    saveError: null,
+  }
   private readonly listeners = new Set<Listener>()
 
   constructor(repository: MindMapRepository, attachmentStorage: AttachmentStorage) {
@@ -65,6 +77,7 @@ export class MindMapEditingService {
     this.undoStack = []
     this.redoStack = []
     this.isDirty = false
+    this.saveError = null
     this.current = await this.repository.findById(id)
     this.pendingDraftRecovery = this.readNewerDraft(id, this.current)
     this.notify()
@@ -188,6 +201,15 @@ export class MindMapEditingService {
    * タブが非表示になる直前(visibilitychange)・beforeunload等のタイミングで
    * 呼び出し、ダーティ状態ならデバウンスを待たずベストエフォートで即座に保存する
    * (architecture.md 4.5節)。
+   *
+   * 以前は`save()`の失敗(OAuthトークン期限切れ`GoogleAuthRequiredError`やネットワーク
+   * エラー)を`catch`しておらず、`scheduleAutoSave()`内の`void`呼び出しにより例外が
+   * 誰にも捕まれず消えていた(UI上は「保存中…」がふっと消えるだけで失敗が一切
+   * 表面化しない)。長時間タブを開いたままトークンが失効すると、以降の全編集で
+   * Driveへの保存が静かに失敗し続け、ユーザーがローカルドラフト復旧バナーで
+   * 気付くまで発覚が遅れる問題があった(docs/task.md 7節)。`isDirty`は保存成功
+   * するまで`true`のまま保ち(ドラフトも消さない)、`saveError`として
+   * presentation層へ伝える。
    */
   async flushPendingSave(): Promise<void> {
     this.cancelScheduledAutoSave()
@@ -199,7 +221,10 @@ export class MindMapEditingService {
     try {
       await this.repository.save(this.current)
       this.isDirty = false
+      this.saveError = null
       this.clearDraft()
+    } catch (error) {
+      this.saveError = error instanceof Error ? error : new Error(String(error))
     } finally {
       this.saving = false
       this.notify()
@@ -219,17 +244,6 @@ export class MindMapEditingService {
   /** 保存インジケータ表示用。 */
   isSaving(): boolean {
     return this.saving
-  }
-
-  /**
-   * 自動保存が効かない等アプリの挙動がおかしい時の保険として、現在のマップ内容を
-   * JSON文字列として取り出す(Driveへの保存と同じスキーマ)。保存済みかどうかに
-   * 関わらず、現在メモリ上にある内容(未保存の変更も含む)をそのまま反映する
-   * (ユーザーフィードバックにより追加)。
-   */
-  exportJson(): string {
-    const map = this.requireCurrent()
-    return JSON.stringify(mindMapToJson(map), null, 2)
   }
 
   /**
@@ -365,6 +379,12 @@ export class MindMapEditingService {
       version: this.renderSnapshot.version + 1,
       map: this.current,
       pendingDraftRecovery: this.pendingDraftRecovery !== null,
+      saveError: this.saveError
+        ? {
+            message: this.saveError.message,
+            isAuthError: this.saveError instanceof GoogleAuthRequiredError,
+          }
+        : null,
     }
     for (const listener of this.listeners) {
       listener()

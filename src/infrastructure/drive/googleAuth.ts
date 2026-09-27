@@ -66,12 +66,26 @@ export class GoogleAuth {
   private readonly clientId: string
   private tokenClient: GoogleTokenClient | null = null
   private accessToken: string | null = null
+  // メモリ上のアクセストークンの失効時刻(安全マージン込み)。`sessionStorage`とは別に
+  // ここでも保持し、`getAccessToken()`が毎回の呼び出しで期限切れを検知できるようにする
+  // (以前は起動時の`loadStoredToken()`でしか期限チェックしておらず、一度メモリに
+  // 載ったトークンをタブを開いたまま1時間以上経っても無条件に返し続け、Drive APIが
+  // 401を返しても`authorizedFetch`側は汎用エラーを投げるだけだったため、期限切れに
+  // 気付けないまま自動保存が延々と静かに失敗し続けるバグがあった。docs/task.md 7節参照)。
+  private expiresAt: number | null = null
   private gisLoadPromise: Promise<void> | null = null
   private pending: PendingTokenRequest | null = null
+  // 無言の再認可(prompt: '')が同時に複数箇所(複数のDrive API呼び出し等)から
+  // 走った場合に、それぞれが`requestToken`を個別に呼ぶと`this.pending`を
+  // 上書きし合い、先に呼ばれた側のPromiseが永遠に解決しなくなる競合バグが
+  // あったため、進行中の再認可を使い回して1回にまとめる。
+  private silentRefreshPromise: Promise<string> | null = null
 
   constructor(clientId: string) {
     this.clientId = clientId
-    this.accessToken = this.loadStoredToken()
+    const stored = this.loadStoredToken()
+    this.accessToken = stored?.accessToken ?? null
+    this.expiresAt = stored?.expiresAt ?? null
   }
 
   isSignedIn(): boolean {
@@ -88,26 +102,36 @@ export class GoogleAuth {
       window.google.accounts.oauth2.revoke(this.accessToken)
     }
     this.accessToken = null
+    this.expiresAt = null
     this.clearStoredToken()
   }
 
   /**
-   * アクセストークンを返す。保持していない場合はまず無言の再認可(prompt: '')
-   * を試み、それも失敗した場合は`GoogleAuthRequiredError`を投げる
+   * アクセストークンを返す。保持していないか期限切れの場合はまず無言の再認可
+   * (prompt: '')を試み、それも失敗した場合は`GoogleAuthRequiredError`を投げる
    * (呼び出し側は「Googleでログイン」導線を表示する)。
    */
   async getAccessToken(): Promise<string> {
-    if (this.accessToken) {
+    if (this.accessToken && this.expiresAt !== null && Date.now() < this.expiresAt) {
       return this.accessToken
     }
     try {
-      return await this.requestToken('')
+      return await this.requestSilentRefresh()
     } catch {
       throw new GoogleAuthRequiredError()
     }
   }
 
-  private loadStoredToken(): string | null {
+  private requestSilentRefresh(): Promise<string> {
+    if (!this.silentRefreshPromise) {
+      this.silentRefreshPromise = this.requestToken('').finally(() => {
+        this.silentRefreshPromise = null
+      })
+    }
+    return this.silentRefreshPromise
+  }
+
+  private loadStoredToken(): StoredToken | null {
     try {
       const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
       if (!raw) {
@@ -118,7 +142,7 @@ export class GoogleAuth {
         sessionStorage.removeItem(SESSION_STORAGE_KEY)
         return null
       }
-      return stored.accessToken
+      return stored
     } catch {
       return null
     }
@@ -126,6 +150,7 @@ export class GoogleAuth {
 
   private saveStoredToken(accessToken: string, expiresInSeconds: number | undefined): void {
     const expiresAt = Date.now() + (expiresInSeconds ?? 3600) * 1000 - EXPIRY_SAFETY_MARGIN_MS
+    this.expiresAt = expiresAt
     const stored: StoredToken = { accessToken, expiresAt }
     try {
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stored))
